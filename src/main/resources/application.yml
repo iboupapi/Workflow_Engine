@@ -62,6 +62,7 @@ auth:
     # Émetteurs JWT configurés (recette §2) : vide = aucun jeton accepté.
     # Chaque émetteur peut déclarer une correspondance role-mapping
     # (rôle moteur utilisé dans owners -> rôles portés par le jeton).
+    # Défaut sûr : sans role-mapping, AUCUN rôle n'est accordé (jamais l'identité du jeton).
     # Exemple d'émetteur de test local (HMAC) — réels à confirmer avec le ministère :
     # issuers:
     #   test:

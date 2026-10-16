@@ -1,7 +1,8 @@
 # ==============================================================================
-# BROUILLON — CIRCUIT E-SERVICE (Demandes citoyennes). NON UTILISABLE POUR LE
-# PILOTE tant que la cible RESPONSABLE_TRAITEMENT n'existe pas dans le moteur.
-# Hypothèses signalées ci-dessous, à valider avec le métier (§14 du cahier de recette).
+# BROUILLON — CIRCUIT E-SERVICE (Demandes citoyennes). Hypothèses signalées
+# ci-dessous, à valider avec le métier (§14 du cahier de recette).
+# La cible RESPONSABLE_TRAITEMENT est supportée par le moteur : elle renvoie à
+# l'unique étape marquée « processingStep: true » (ici AGENT_TRAITEMENT).
 # ==============================================================================
 definition:
   key: "E_SERVICE_DEMANDE"
@@ -39,6 +40,9 @@ steps:
   - key: "AGENT_TRAITEMENT"
     name: "Agent traitant"
     type: "TASK"
+    # Étape de traitement de référence : cible de la reprise RESPONSABLE_TRAITEMENT
+    # après rejet (une seule étape annotée par circuit, imposé à l'import).
+    processingStep: true
     owners:
       - "AGENT_TRAITEMENT"
 
@@ -97,11 +101,10 @@ transitions:
     action: "VALIDER"
     target: "DEMANDE_TRAITEE"
 
-  # Approximation PROVISOIRE : le rapport impose le retour au responsable du traitement
-  # (l'agent après imputation, le chef après traitement direct), cible non supportée
-  # par le moteur. En attendant, ces rejets renvoient au chef de division, qui peut
-  # réimputer à l'agent. Seul le rejet du chef de division à la réception garde la
-  # cible INITIATEUR (le citoyen), si le ministère confirme ce renvoi.
+  # Rejets : le rapport impose le retour au responsable du traitement, cible désormais
+  # supportée par le moteur (renvoi vers l'unique étape processingStep: true, ici
+  # AGENT_TRAITEMENT). Le rejet du chef de division à la réception garde la cible
+  # INITIATEUR (le citoyen), si le ministère confirme ce renvoi.
   - source: "CHEF_DIVISION"
     action: "REJETER"
     target: "INITIATEUR"
@@ -112,8 +115,8 @@ transitions:
 
   - source: "DLEC"
     action: "REJETER"
-    target: "CHEF_DIVISION"
+    target: "RESPONSABLE_TRAITEMENT"
 
   - source: "DGFP"
     action: "REJETER"
-    target: "CHEF_DIVISION"
+    target: "RESPONSABLE_TRAITEMENT"

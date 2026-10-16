@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -13,10 +14,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StreamUtils;
+import sn.gouv.mfp.workflow.service.WorkflowDefinitionLoaderService;
 
 /**
  * Cahier de recette, section 2 — validation des jetons contre l'émetteur de test :
@@ -30,7 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
     "auth.jwt.issuers.test.issuer=https://test.mfp.local",
     "auth.jwt.issuers.test.audience=workflow-api",
     "auth.jwt.issuers.test.hmac-secret=jeton-test-local-32-octets-min!!",
-    "auth.jwt.issuers.test.roles-claim=roles"
+    "auth.jwt.issuers.test.roles-claim=roles",
+    // Défaut = aucun rôle : la correspondance doit être déclarée explicitement.
+    "auth.jwt.issuers.test.role-mapping[AGENT_BUREAU][0]=AGENT_BUREAU"
 })
 class JwtAuthenticationTest {
 
@@ -38,17 +44,23 @@ class JwtAuthenticationTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private WorkflowDefinitionLoaderService loaderService;
+
+    @Autowired
     private sn.gouv.mfp.workflow.repository.WorkflowHistoryRepository histories;
 
     @Test
     void validToken_shouldAuthenticateAndRecordTokenIdentity() throws Exception {
+        // Circuit connu, importé dans la transaction du test : le test ne dépend ni du
+        // circuit de démonstration au démarrage, ni d'une donnée résiduelle en base.
+        loaderService.loadAndSaveYamlDefinition(girafeYaml());
         String token = JwtTestTokens.signed("agent-jwt-01", List.of("AGENT_BUREAU"));
 
         String body = mockMvc.perform(post("/api/workflows/GIRAFE_ACTES/start")
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"initiatorId":"imposteur","variables":{"circuit":"COURT"}}"""))
+                        {"initiatorId":"imposteur","startStepKey":"AGENT_BUREAU","variables":{"circuit":"COURT"}}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.initiatorId").value("agent-jwt-01"))
                 .andReturn()
@@ -153,5 +165,11 @@ class JwtAuthenticationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"initiatorId\":\"agent-001\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private String girafeYaml() throws Exception {
+        return StreamUtils.copyToString(
+                new ClassPathResource("workflows/girafe-workflow.yaml").getInputStream(),
+                StandardCharsets.UTF_8);
     }
 }

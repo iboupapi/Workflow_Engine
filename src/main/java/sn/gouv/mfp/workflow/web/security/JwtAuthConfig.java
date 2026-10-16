@@ -120,25 +120,28 @@ public class JwtAuthConfig {
     }
 
     /**
-     * Rôles moteur dérivés des rôles du jeton. Sans correspondance, identité (le rôle du
-     * jeton est le rôle moteur) ; avec correspondance, un rôle moteur est retenu si le
-     * jeton porte l'un de ses rôles acceptés. Un rôle du jeton non reconnu ne donne rien.
+     * Rôles moteur dérivés des rôles du jeton par la correspondance de l'émetteur.
+     * <p>
+     * Défaut sûr : <strong>sans correspondance configurée, aucun rôle n'est accordé</strong>
+     * — jamais l'identité du jeton. Un rôle moteur est retenu dès que le jeton porte l'un de
+     * ses rôles acceptés ; un rôle du jeton non reconnu ne donne rien. Le rôle réservé
+     * {@code ADMIN} n'est jamais accordé depuis le jeton (uniquement aux sujets nommés).
      */
     static Set<String> engineRoles(
             List<String> tokenRoles, Map<String, List<String>> roleMapping) {
         Set<String> engineRoles = new LinkedHashSet<>();
-        if (tokenRoles == null) {
+        if (tokenRoles == null || roleMapping == null || roleMapping.isEmpty()) {
             return engineRoles;
         }
-        if (roleMapping == null || roleMapping.isEmpty()) {
-            engineRoles.addAll(tokenRoles);
-        } else {
-            roleMapping.forEach((engineRole, accepted) -> {
-                if (accepted != null && accepted.stream().anyMatch(tokenRoles::contains)) {
-                    engineRoles.add(engineRole);
-                }
-            });
-        }
+        roleMapping.forEach((engineRole, accepted) -> {
+            if (engineRole == null || engineRole.isBlank()
+                    || AdminProperties.ADMIN_ROLE.equalsIgnoreCase(engineRole.trim())) {
+                return;
+            }
+            if (accepted != null && accepted.stream().anyMatch(tokenRoles::contains)) {
+                engineRoles.add(engineRole);
+            }
+        });
         return engineRoles;
     }
 

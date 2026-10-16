@@ -25,9 +25,9 @@ public record JwtProperties(Map<String, IssuerProperties> issuers) {
      * @param roleMapping  correspondance <strong>rôle moteur → rôles du jeton</strong> :
      *                     un rôle moteur (celui employé dans {@code owners} des étapes)
      *                     est accordé dès que le jeton porte l'un des rôles listés.
-     *                     Vide = correspondance identité (le nom du rôle du jeton EST
-     *                     le rôle moteur). Les rôles du jeton non reconnus ne donnent
-     *                     aucun droit (refus par défaut).
+     *                     <strong>Vide = aucun rôle accordé</strong> (jamais l'identité du
+     *                     jeton). Les rôles du jeton non reconnus ne donnent aucun droit,
+     *                     et le rôle réservé {@code ADMIN} n'est jamais dérivé du jeton.
      */
     public record IssuerProperties(
             String issuer,

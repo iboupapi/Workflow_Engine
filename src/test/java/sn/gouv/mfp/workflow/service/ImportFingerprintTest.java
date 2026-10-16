@@ -41,7 +41,7 @@ class ImportFingerprintTest {
     private WorkflowConfigDTO circuit(String key, List<String> stepOrder, String condition) {
         var steps = stepOrder.stream()
                 .map(k -> new WorkflowConfigDTO.StepConfigDTO(
-                        k, k, k.equals("A") ? "START" : "END", null, null))
+                        k, k, k.equals("A") ? "START" : "END", null, null, null))
                 .toList();
         var transition = new WorkflowConfigDTO.TransitionConfigDTO("A", "VALIDER", "B", condition);
         return new WorkflowConfigDTO(

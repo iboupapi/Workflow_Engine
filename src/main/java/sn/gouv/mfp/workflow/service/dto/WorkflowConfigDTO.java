@@ -36,7 +36,9 @@ public record WorkflowConfigDTO(
             String name,
             String type,
             List<String> requiredDataOnValidate,
-            List<String> owners) {
+            List<String> owners,
+            /** Étape de traitement de référence (cible RESPONSABLE_TRAITEMENT) : au plus une par circuit. */
+            Boolean processingStep) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

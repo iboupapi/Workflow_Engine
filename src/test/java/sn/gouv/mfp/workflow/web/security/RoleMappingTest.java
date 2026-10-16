@@ -7,17 +7,20 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * Correspondance configurable des rôles (point 2) : rôles du jeton lus en LISTE, traduits
- * par la correspondance de l'émetteur ; un rôle du jeton inconnu n'accorde aucun droit.
+ * Correspondance configurable des rôles (point 2). Règles :
+ * <ul>
+ *   <li>défaut sûr : <strong>aucune correspondance = aucun rôle</strong>, jamais l'identité
+ *   du jeton ;</li>
+ *   <li>un rôle moteur est accordé si le jeton porte l'un de ses rôles acceptés ;</li>
+ *   <li>le rôle réservé {@code ADMIN} n'est jamais accordé depuis le jeton.</li>
+ * </ul>
  */
 class RoleMappingTest {
 
     @Test
-    void withoutMapping_tokenRoleIsEngineRole() {
-        assertThat(JwtAuthConfig.engineRoles(List.of("A", "B"), null))
-                .containsExactlyInAnyOrder("A", "B");
-        assertThat(JwtAuthConfig.engineRoles(List.of("A"), Map.of()))
-                .containsExactly("A");
+    void withoutMapping_noRoleGranted_evenWithTokenRoles() {
+        assertThat(JwtAuthConfig.engineRoles(List.of("AGENT_BUREAU", "ADMIN"), null)).isEmpty();
+        assertThat(JwtAuthConfig.engineRoles(List.of("AGENT_BUREAU"), Map.of())).isEmpty();
     }
 
     @Test
@@ -38,6 +41,21 @@ class RoleMappingTest {
 
         assertThat(JwtAuthConfig.engineRoles(List.of("NINJA"), mapping)).isEmpty();
         assertThat(JwtAuthConfig.engineRoles(List.of("AGENT_BUREAU"), mapping)).isEmpty();
+    }
+
+    @Test
+    void reservedAdminRole_neverGrantedFromToken() {
+        // Tentative par identité (rôle du jeton « ADMIN »)
+        assertThat(JwtAuthConfig.engineRoles(List.of("ADMIN"), Map.of("AGENT_BUREAU", List.of("X"))))
+                .isEmpty();
+        // Tentative par correspondance explicite vers « ADMIN »
+        assertThat(JwtAuthConfig.engineRoles(
+                        List.of("ROLE_SUPER"), Map.of("ADMIN", List.of("ROLE_SUPER"))))
+                .isEmpty();
+        // Même insensible à la casse / aux espaces
+        assertThat(JwtAuthConfig.engineRoles(
+                        List.of("ROLE_SUPER"), Map.of("  admin ", List.of("ROLE_SUPER"))))
+                .isEmpty();
     }
 
     @Test

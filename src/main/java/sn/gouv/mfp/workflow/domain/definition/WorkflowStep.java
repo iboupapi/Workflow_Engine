@@ -74,4 +74,12 @@ public class WorkflowStep {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> owners;
+
+    /**
+     * Étape de traitement de référence du circuit (YAML {@code processingStep: true}) :
+     * cible de la reprise {@code RESPONSABLE_TRAITEMENT} après un rejet (recette 6.5).
+     * Une seule étape par définition peut porter ce marqueur (contrôlé à l'import).
+     */
+    @Column(name = "processing_step", nullable = false)
+    private boolean processingStep;
 }

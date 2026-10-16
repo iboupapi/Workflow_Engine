@@ -4,5 +4,7 @@ package sn.gouv.mfp.workflow.domain.execution;
 public enum InstanceStatus {
     ACTIVE,
     COMPLETED,
-    CANCELLED
+    CANCELLED,
+    /** Rejet administratif définitif (action REJET_DEFINITIF, recette 6.10) : distinct de l'annulation usager. */
+    REJECTED_FINAL
 }

@@ -16,6 +16,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "auth.admin")
 public record AdminProperties(List<String> subjects) {
 
+    /**
+     * Rôle réservé d'administration. Il est accordé <strong>uniquement</strong> aux sujets
+     * nommés ({@link #subjects()}) ; il n'est <strong>jamais</strong> dérivé des rôles du
+     * jeton et ne peut pas être déclaré dans les {@code owners} d'une étape.
+     */
+    public static final String ADMIN_ROLE = "ADMIN";
+
     /** Sujets administrateurs configurés (jamais nuls, éventuellement vides). */
     public List<String> subjectsOrEmpty() {
         return subjects != null ? subjects : List.of();

@@ -17,6 +17,7 @@ import sn.gouv.mfp.workflow.domain.execution.InstanceStatus;
 import sn.gouv.mfp.workflow.domain.execution.WorkflowInstance;
 import sn.gouv.mfp.workflow.exception.MissingRequiredDataException;
 import sn.gouv.mfp.workflow.exception.WorkflowConflictException;
+import sn.gouv.mfp.workflow.exception.WorkflowValidationException;
 import sn.gouv.mfp.workflow.repository.WorkflowDefinitionRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowHistoryRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowInstanceRepository;
@@ -24,8 +25,9 @@ import sn.gouv.mfp.workflow.repository.WorkflowStepRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
 
 /**
- * Chantier D — cibles de rejet dynamiques (ETAPE_PRECEDENTE, RESPONSABLE_TRAITEMENT),
- * imputation avec traçabilité (setsHandler) et rejet définitif.
+ * Chantier D — cibles de rejet dynamiques (ETAPE_PRECEDENTE, RESPONSABLE_TRAITEMENT
+ * résolue vers l'étape {@code processingStep: true}), imputation avec traçabilité
+ * (setsHandler) et rejet définitif (statut REJECTED_FINAL).
  */
 @SpringBootTest
 @Transactional
@@ -80,7 +82,7 @@ class WorkflowRejectTargetsTest {
     }
 
     @Test
-    void rejectToHandler_shouldReturnToAssigneeLastStep() {
+    void rejectToHandler_shouldReturnToAnnotatedProcessingStep() {
         givenCircuit("HAND_" + unique(), false);
 
         WorkflowInstance instance =
@@ -95,12 +97,12 @@ class WorkflowRejectTargetsTest {
         WorkflowInstance rejected = executionService.executeTransition(
                 instance.getId(), "REJETER", "verif-01", "À reprendre", null);
 
-        // Retour à B, dernière étape où l'imputé a agi (pas à A).
+        // Retour à B, étape de traitement de référence (processingStep: true).
         assertThat(rejected.getCurrentStepKey()).isEqualTo("B");
     }
 
     @Test
-    void rejectToHandlerWithoutAssignee_shouldFallBackToPrevious() {
+    void rejectToHandler_shouldReturnToProcessingStepWithoutAssignee() {
         givenCircuit("HAND2_" + unique(), false);
 
         WorkflowInstance instance =
@@ -111,7 +113,35 @@ class WorkflowRejectTargetsTest {
         WorkflowInstance rejected = executionService.executeTransition(
                 instance.getId(), "REJETER", "agent-003", "À reprendre", null);
 
+        // Sans imputation, la reprise vise tout de même l'étape de traitement de référence.
         assertThat(rejected.getCurrentStepKey()).isEqualTo("B");
+    }
+
+    @Test
+    void rejectToHandlerWithoutAnnotation_shouldBeRefused() {
+        lastKey = "HAND_NOANN_" + unique();
+        WorkflowDefinition definition = new WorkflowDefinition();
+        definition.setKey(lastKey);
+        definition.setVersion(1);
+        definition.setName("Circuit sans étape de traitement " + lastKey);
+        definition = definitions.save(definition);
+        WorkflowStep a = newStep(definition, "A", StepType.START);
+        WorkflowStep b = newStep(definition, "B", StepType.TASK);
+        WorkflowStep c = newStep(definition, "C", StepType.TASK);
+        newStep(definition, "FIN", StepType.END);
+        newTransition(a, "AVANCER", "B");
+        newTransition(b, "AVANCER", "C");
+        newTransition(c, "REJETER", "RESPONSABLE_TRAITEMENT");
+
+        WorkflowInstance instance =
+                executionService.startWorkflow(lastKey, "agent-001", null, "A");
+        executionService.executeTransition(instance.getId(), "AVANCER", "agent-001", null, null);
+        executionService.executeTransition(instance.getId(), "AVANCER", "agent-002", null, null);
+
+        assertThatThrownBy(() -> executionService.executeTransition(
+                        instance.getId(), "REJETER", "agent-003", null, null))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("processingStep");
     }
 
     @Test
@@ -173,7 +203,7 @@ class WorkflowRejectTargetsTest {
         WorkflowInstance closed = executionService.executeTransition(
                 instance.getId(), "REJET_DEFINITIF", "dg-01", "Irrecevable", null);
 
-        assertThat(closed.getStatus()).isEqualTo(InstanceStatus.CANCELLED);
+        assertThat(closed.getStatus()).isEqualTo(InstanceStatus.REJECTED_FINAL);
         assertThatThrownBy(() -> executionService.executeTransition(
                         instance.getId(), "AVANCER", "agent-001", null, null))
                 .isInstanceOf(WorkflowConflictException.class);
@@ -207,7 +237,9 @@ class WorkflowRejectTargetsTest {
         definition = definitions.save(definition);
 
         WorkflowStep a = newStep(definition, "A", StepType.START);
-        WorkflowStep b = newStep(definition, "B", StepType.TASK);
+        // B est l'étape de traitement de référence (cible RESPONSABLE_TRAITEMENT) : le
+        // marqueur est posé AVANT l'INSERT (workflow_step est immuable, aucun UPDATE applicatif).
+        WorkflowStep b = newStep(definition, "B", StepType.TASK, true);
         WorkflowStep c = newStep(definition, "C", StepType.TASK);
         if (finalRejection) {
             newStep(definition, "FIN", StepType.END);
@@ -224,10 +256,21 @@ class WorkflowRejectTargetsTest {
     }
 
     private WorkflowStep newStep(WorkflowDefinition definition, String stepKey, StepType type) {
+        return newStep(definition, stepKey, type, false);
+    }
+
+    /**
+     * Variante avec marqueur {@code processingStep}. Le flag est inclus dans l'INSERT :
+     * le compte applicatif n'a pas le droit d'UPDATE sur {@code workflow_step}
+     * (privilèges minimaux + déclencheur d'immuabilité, recette 8.2/8.5).
+     */
+    private WorkflowStep newStep(
+            WorkflowDefinition definition, String stepKey, StepType type, boolean processingStep) {
         WorkflowStep step = new WorkflowStep();
         step.setDefinition(definition);
         step.setStepKey(stepKey);
         step.setType(type);
+        step.setProcessingStep(processingStep);
         return steps.save(step);
     }
 

@@ -54,8 +54,9 @@ auth:
 ```
 
 Un rôle moteur est accordé dès que le jeton porte l'un des rôles listés. **Sans**
-`role-mapping`, la correspondance est l'identité (le nom du rôle du jeton EST le rôle
-moteur). Un rôle du jeton **non reconnu n'accorde aucun droit**.
+`role-mapping`, **aucun rôle n'est accordé** (défaut sûr : jamais l'identité du jeton).
+Un rôle du jeton **non reconnu n'accorde aucun droit**, et le rôle réservé `ADMIN` n'est
+**jamais** dérivé du jeton (seuls les sujets nommés de `auth.admin.subjects` le reçoivent).
 
 ## Contrôle par rôle d'étape (YAML versionné)
 

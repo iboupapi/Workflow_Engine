@@ -99,7 +99,8 @@ public class WorkflowController {
             description = "Exécute l'action demandée depuis l'étape courante : contrôle du rôle "
                     + "responsable de l'étape (owners du YAML), fusion des variables, données "
                     + "obligatoires, conditions SpEL, mise à jour et historisation. Un rôle "
-                    + "administrateur n'ouvre jamais une action d'étape. Verrou pessimiste.")
+                    + "administrateur n'ouvre jamais une action d'étape. Le contrôle du rôle est "
+                    + "exécuté sous le verrou pessimiste (atomique avec la mutation).")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Transition appliquée.",
                 content = @Content(schema = @Schema(implementation = WorkflowInstanceResponse.class))),
@@ -113,13 +114,13 @@ public class WorkflowController {
             @Parameter(description = "Identifiant du dossier.") @PathVariable UUID instanceId,
             @RequestBody TransitionRequest request,
             Authentication authentication) {
-        authorizationService.authorizeTransition(instanceId, Viewer.from(authentication));
         WorkflowInstance instance = executionService.executeTransition(
                 instanceId,
                 request.action(),
                 requestActor.resolve(authentication, request.actorId()),
                 request.comment(),
-                request.variables());
+                request.variables(),
+                Viewer.from(authentication).roles());
         return WorkflowInstanceResponse.from(instance);
     }
 

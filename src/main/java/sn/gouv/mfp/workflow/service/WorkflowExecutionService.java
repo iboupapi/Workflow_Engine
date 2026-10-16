@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,9 +54,10 @@ public class WorkflowExecutionService {
     public static final String PREVIOUS_STEP_TARGET = "ETAPE_PRECEDENTE";
 
     /**
-     * Cible virtuelle (chantier D, recette 6.5) : renvoie au responsable du traitement —
-     * la dernière étape où la personne imputée a agi, ou l'étape précédente si elle
-     * n'a jamais agi ou si personne n'est imputé.
+     * Cible virtuelle (recette 6.5) : renvoie à l'étape de traitement de référence du
+     * circuit — l'unique étape marquée {@code processingStep: true} dans le YAML.
+     * Le marqueur est imposé à l'import (au plus une étape, obligatoire si cette cible
+     * est utilisée) ; le moteur refuse la reprise si aucune étape n'est annotée.
      */
     public static final String HANDLER_TARGET = "RESPONSABLE_TRAITEMENT";
 
@@ -63,8 +65,9 @@ public class WorkflowExecutionService {
     public static final String REJECT_ACTION = "REJETER";
 
     /**
-     * Action de rejet définitif (recette 6.10) : clôt le dossier en CANCELLED, sans
-     * action ultérieure possible (409).
+     * Action de rejet définitif (recette 6.10) : clôt le dossier en REJECTED_FINAL
+     * (rejet administratif, distinct de l'annulation usager CANCELLED), sans action
+     * ultérieure possible (409).
      */
     public static final String FINAL_REJECT_ACTION = "REJET_DEFINITIF";
 
@@ -204,13 +207,9 @@ public class WorkflowExecutionService {
     }
 
     /**
-     * Fait franchir une étape au dossier en exécutant {@code action}.
-     *
-     * @param instanceId          identifiant du dossier
-     * @param action              déclencheur (ex. "VALIDER", "REJETER")
-     * @param actorId             identifiant de l'agent exécutant l'action
-     * @param comment             motif (obligatoire en cas de rejet côté appelant)
-     * @param additionalVariables variables à fusionner dans le dossier avant évaluation (peuvent être nulles)
+     * Chemin <strong>interne/de confiance</strong> (tests de service, batch) : aucun contrôle
+     * de rôle d'étape n'est appliqué. Le chemin API passe par la surcharge avec
+     * {@code actorRoles}, qui contrôle le rôle sous le verrou.
      */
     @Transactional
     public WorkflowInstance executeTransition(
@@ -219,6 +218,31 @@ public class WorkflowExecutionService {
             String actorId,
             String comment,
             Map<String, Object> additionalVariables) {
+        return executeTransition(
+                instanceId, action, actorId, comment, additionalVariables, null);
+    }
+
+    /**
+     * Fait franchir une étape au dossier en exécutant {@code action}.
+     *
+     * @param instanceId          identifiant du dossier
+     * @param action              déclencheur (ex. "VALIDER", "REJETER")
+     * @param actorId             identifiant de l'agent exécutant l'action
+     * @param comment             motif (obligatoire en cas de rejet côté appelant)
+     * @param additionalVariables variables à fusionner dans le dossier avant évaluation (peuvent être nulles)
+     * @param actorRoles          rôles moteur de l'acteur ; {@code null} = chemin de confiance
+     *                            (aucun contrôle). Non nul : le rôle de l'étape courante est
+     *                            exigé <strong>sous le verrou</strong> (point 2), ce qui rend
+     *                            le contrôle atomique avec la mutation.
+     */
+    @Transactional
+    public WorkflowInstance executeTransition(
+            UUID instanceId,
+            String action,
+            String actorId,
+            String comment,
+            Map<String, Object> additionalVariables,
+            Set<String> actorRoles) {
         // Verrouillage pessimiste : sérialise les transitions concurrentes sur ce dossier.
         WorkflowInstance instance = instances.findByIdWithLock(instanceId)
                 .orElseThrow(() -> new WorkflowInstanceNotFoundException(
@@ -243,6 +267,11 @@ public class WorkflowExecutionService {
                         instance.getDefinition().getId(), instance.getCurrentStepKey())
                 .orElseThrow(() -> new WorkflowValidationException("Étape courante '"
                         + instance.getCurrentStepKey() + "' inconnue dans la définition"));
+
+        // Point 2 : contrôle du rôle d'étape SOUS le verrou (atomique avec la mutation).
+        if (actorRoles != null) {
+            StepRoleAuthority.require(currentStep, actorRoles, "agir sur l'étape");
+        }
 
         // Module 6.2 : données obligatoires de l'étape courante (jamais sur un rejet,
         // qui doit toujours rester possible même dossier incomplet).
@@ -288,8 +317,8 @@ public class WorkflowExecutionService {
             instance.setAssigneeId(toActor);
         }
         if (FINAL_REJECT_ACTION.equalsIgnoreCase(action)) {
-            // Recette 6.10 : rejet définitif, sans action ultérieure possible (409).
-            instance.setStatus(InstanceStatus.CANCELLED);
+            // Recette 6.10 : rejet définitif (statut dédié REJECTED_FINAL), sans action ultérieure (409).
+            instance.setStatus(InstanceStatus.REJECTED_FINAL);
         }
 
         WorkflowHistory history = new WorkflowHistory();
@@ -482,9 +511,8 @@ public class WorkflowExecutionService {
      *   <li>{@code INITIATEUR} : étape d'initiation (première entrée d'historique) ;</li>
      *   <li>{@code ETAPE_PRECEDENTE} (recette 6.3) : dernière étape réellement traversée
      *   ({@code from_step} de la dernière entrée d'historique) ;</li>
-     *   <li>{@code RESPONSABLE_TRAITEMENT} (recette 6.5) : dernière étape où la personne
-     *   imputée a agi, ou étape précédente si elle n'a jamais agi ou si personne
-     *   n'est imputé.</li>
+     *   <li>{@code RESPONSABLE_TRAITEMENT} (recette 6.5) : étape de traitement de
+     *   référence du circuit ({@code processingStep: true}), imposée à l'import.</li>
      * </ul>
      */
     private String resolveTargetStep(WorkflowInstance instance, String targetStepKey) {
@@ -518,17 +546,18 @@ public class WorkflowExecutionService {
         return trail.get(trail.size() - 1).getFromStep();
     }
 
+    /**
+     * Recette 6.5 : la reprise RESPONSABLE_TRAITEMENT renvoie à l'étape de traitement
+     * de référence du circuit (unique étape {@code processingStep: true}). Le marqueur
+     * est vérifié à l'import ; on refuse la reprise si la définition n'en porte aucun
+     * (circuit construit hors import YAML).
+     */
     private String handlerStep(WorkflowInstance instance) {
-        String assignee = instance.getAssigneeId();
-        if (assignee != null) {
-            List<WorkflowHistory> trail =
-                    histories.findByInstanceIdOrderByTimestampAsc(instance.getId());
-            for (int i = trail.size() - 1; i >= 0; i--) {
-                if (assignee.equals(trail.get(i).getActorId())) {
-                    return trail.get(i).getFromStep();
-                }
-            }
-        }
-        return previousStep(instance);
+        return steps.findFirstByDefinitionIdAndProcessingStepTrue(instance.getDefinition().getId())
+                .map(WorkflowStep::getStepKey)
+                .orElseThrow(() -> new WorkflowValidationException(
+                        "Reprise RESPONSABLE_TRAITEMENT impossible : le circuit '"
+                                + instance.getDefinition().getKey() + "' ne déclare aucune étape "
+                                + "de traitement (processingStep: true)."));
     }
 }

@@ -179,6 +179,7 @@ public class WorkflowDefinitionLoaderService {
                     ? new ArrayList<>(stepDto.requiredDataOnValidate())
                     : null);
             step.setOwners(stepDto.owners() != null ? new ArrayList<>(stepDto.owners()) : null);
+            step.setProcessingStep(Boolean.TRUE.equals(stepDto.processingStep()));
             savedSteps.put(stepDto.key(), steps.save(step));
         }
 
@@ -259,8 +260,11 @@ public class WorkflowDefinitionLoaderService {
     /**
      * Valide la cohérence graphique du circuit avant toute écriture en base, et renvoie
      * les conditions SpEL sous forme canonique normalisée (recette 1.6).
+     * <p>
+     * Visibilité de paquet pour permettre le test unitaire des règles de validation
+     * sans base de données.
      */
-    private Map<TransitionConfigDTO, String> validateGraph(WorkflowConfigDTO config) {
+    Map<TransitionConfigDTO, String> validateGraph(WorkflowConfigDTO config) {
         if (config.steps() == null || config.steps().isEmpty()) {
             throw new WorkflowValidationException("YAML invalide : aucune étape déclarée.");
         }
@@ -271,6 +275,7 @@ public class WorkflowDefinitionLoaderService {
         Set<String> stepKeys = new HashSet<>();
         boolean hasStart = false;
         boolean hasEnd = false;
+        String processingStepKey = null;
         for (StepConfigDTO step : config.steps()) {
             if (step.key() == null || step.key().isBlank()) {
                 throw new WorkflowValidationException("YAML invalide : étape sans clé.");
@@ -287,6 +292,16 @@ public class WorkflowDefinitionLoaderService {
                 throw new WorkflowValidationException("YAML invalide : le rôle réservé '"
                         + WorkflowAuthorizationService.ADMIN_ROLE + "' ne peut pas être responsable "
                         + "de l'étape '" + step.key() + "' (un administrateur n'est pas validateur).");
+            }
+            // Cible RESPONSABLE_TRAITEMENT : au plus une étape de traitement de référence
+            // par circuit, sinon la reprise après rejet serait ambiguë.
+            if (Boolean.TRUE.equals(step.processingStep())) {
+                if (processingStepKey != null) {
+                    throw new WorkflowValidationException("YAML incohérent : plusieurs étapes de "
+                            + "traitement (processingStep: true) déclarées ('" + processingStepKey
+                            + "' et '" + step.key() + "') ; une seule est autorisée par circuit.");
+                }
+                processingStepKey = step.key();
             }
             try {
                 StepType type = StepType.valueOf(step.type());
@@ -317,6 +332,11 @@ public class WorkflowDefinitionLoaderService {
                             + "(clés autorisées dans les conditions SpEL).");
         }
         Set<String> declaredVariables = new HashSet<>(config.variables());
+        Set<String> virtualTargets = Set.of(
+                WorkflowExecutionService.INITIATEUR_TARGET,
+                WorkflowExecutionService.PREVIOUS_STEP_TARGET,
+                WorkflowExecutionService.HANDLER_TARGET);
+        boolean usesHandlerTarget = false;
         Map<TransitionConfigDTO, String> canonicalConditions = new HashMap<>();
         for (TransitionConfigDTO transition : config.transitions()) {
             if (!stepKeys.contains(transition.source())) {
@@ -324,16 +344,25 @@ public class WorkflowDefinitionLoaderService {
                         "YAML incohérent : étape source inconnue '" + transition.source() + "'.");
             }
             if (!stepKeys.contains(transition.target())
-                    && !WorkflowExecutionService.INITIATEUR_TARGET.equals(transition.target())) {
+                    && !virtualTargets.contains(transition.target())) {
                 throw new WorkflowValidationException("YAML incohérent : étape cible inconnue '"
                         + transition.target() + "' (transition " + transition.source()
                         + " -" + transition.action() + "-> " + transition.target() + ").");
+            }
+            if (WorkflowExecutionService.HANDLER_TARGET.equals(transition.target())) {
+                usesHandlerTarget = true;
             }
             if (transition.condition() != null && !transition.condition().isBlank()) {
                 canonicalConditions.put(
                         transition,
                         SpelSecurityValidator.validate(transition.condition(), declaredVariables));
             }
+        }
+        if (usesHandlerTarget && processingStepKey == null) {
+            throw new WorkflowValidationException("YAML incohérent : la cible "
+                    + WorkflowExecutionService.HANDLER_TARGET + " est utilisée mais aucune étape "
+                    + "n'est marquée 'processingStep: true' ; annotez l'étape de traitement de "
+                    + "référence (une seule par circuit).");
         }
         return canonicalConditions;
     }

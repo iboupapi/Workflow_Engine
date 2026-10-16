@@ -2,6 +2,7 @@ package sn.gouv.mfp.workflow.service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -197,9 +198,13 @@ public class WorkflowReadService {
                     "La vue complète est réservée aux administrateurs.");
         }
         int size = Math.min(Math.max(pageable.getPageSize(), 1), MAX_PAGE_SIZE);
-        List<WorkflowInstance> candidates = candidates(viewer, criteria.view());
+        // Cache des rôles responsables par définition : une seule requête d'étapes par
+        // définition, et AUCUNE requête d'historique (liste = étape courante seule), ce qui
+        // supprime le N+1 par instance (recette 11.5).
+        Map<UUID, Map<String, List<String>>> ownersCache = new HashMap<>();
+        List<WorkflowInstance> candidates = candidates(viewer, criteria.view(), ownersCache);
         List<WorkflowInstance> filtered = candidates.stream()
-                .filter(instance -> matches(instance, viewer, criteria))
+                .filter(instance -> matches(instance, viewer, criteria, ownersCache))
                 .sorted(BY_NEWEST)
                 .toList();
         int total = filtered.size();
@@ -213,7 +218,8 @@ public class WorkflowReadService {
                 total);
     }
 
-    private List<WorkflowInstance> candidates(Viewer viewer, InstanceView view) {
+    private List<WorkflowInstance> candidates(
+            Viewer viewer, InstanceView view, Map<UUID, Map<String, List<String>>> ownersCache) {
         // Triés avant plafonnement : sans cela, les dossiers récents seraient invisibles
         // dès que la table dépasse le garde-fou.
         return switch (view) {
@@ -230,15 +236,21 @@ public class WorkflowReadService {
                 yield dedupe(own);
             }
             case INBOX -> instances.findByStatus(InstanceStatus.ACTIVE).stream()
-                    .filter(instance -> isCurrentStepPooled(instance, viewer))
+                    .filter(instance -> isCurrentStepPooled(instance, viewer, ownersCache))
                     .sorted(BY_NEWEST)
                     .limit(MAX_SCAN)
                     .toList();
         };
     }
 
-    private boolean matches(WorkflowInstance instance, Viewer viewer, SearchCriteria criteria) {
-        if (!canRead(instance, viewer)) {
+    private boolean matches(
+            WorkflowInstance instance,
+            Viewer viewer,
+            SearchCriteria criteria,
+            Map<UUID, Map<String, List<String>>> ownersCache) {
+        // Liste : étape courante seule (pas d'historique) — voit le dossier en boîte mais
+        // pas les étapes traversées, réservées à la consultation directe.
+        if (!canRead(instance, viewer, ownersCache, false)) {
             return false;
         }
         if (criteria.definitionKey() != null
@@ -261,7 +273,16 @@ public class WorkflowReadService {
         return true;
     }
 
+    /** Consultation directe : étape courante OU traversée (historique). */
     private boolean canRead(WorkflowInstance instance, Viewer viewer) {
+        return canRead(instance, viewer, new HashMap<>(), true);
+    }
+
+    private boolean canRead(
+            WorkflowInstance instance,
+            Viewer viewer,
+            Map<UUID, Map<String, List<String>>> ownersCache,
+            boolean includeTraversed) {
         if (viewer.admin()) {
             return true;
         }
@@ -270,14 +291,16 @@ public class WorkflowReadService {
                         || viewer.userId().equals(instance.getAssigneeId()))) {
             return true;
         }
-        // Règle de lecture (point 2) : rôle de l'étape courante OU d'une étape traversée.
+        // Règle de lecture (point 2) : rôle de l'étape courante (ou traversée en direct).
         return instance.getStatus() == InstanceStatus.ACTIVE
-                && readableByRole(instance, viewer, true);
+                && readableByRole(instance, viewer, ownersCache, includeTraversed);
     }
 
     /** Dossier en boîte collective : étape courante dont un rôle du demandeur est responsable. */
-    private boolean isCurrentStepPooled(WorkflowInstance instance, Viewer viewer) {
-        return readableByRole(instance, viewer, false);
+    private boolean isCurrentStepPooled(
+            WorkflowInstance instance, Viewer viewer,
+            Map<UUID, Map<String, List<String>>> ownersCache) {
+        return readableByRole(instance, viewer, ownersCache, false);
     }
 
     /**
@@ -288,7 +311,10 @@ public class WorkflowReadService {
      * Le rôle réservé {@code ADMIN} n'est jamais compté comme responsable d'étape.
      */
     private boolean readableByRole(
-            WorkflowInstance instance, Viewer viewer, boolean includeTraversed) {
+            WorkflowInstance instance,
+            Viewer viewer,
+            Map<UUID, Map<String, List<String>>> ownersCache,
+            boolean includeTraversed) {
         if (viewer.roles().isEmpty()) {
             return false;
         }
@@ -296,20 +322,23 @@ public class WorkflowReadService {
                 && !instance.getAssigneeId().equals(viewer.userId())) {
             return false;
         }
-        Set<String> owners = ownersOfRelevantSteps(instance, includeTraversed);
+        Set<String> owners = ownersOfRelevantSteps(instance, ownersCache, includeTraversed);
         return viewer.roles().stream()
                 .filter(role -> role != null && !"ADMIN".equalsIgnoreCase(role))
                 .anyMatch(owners::contains);
     }
 
-    /** Rôles responsables des étapes pertinentes (courante, et traversées si demandé). */
+    /**
+     * Rôles responsables des étapes pertinentes (courante, et traversées si demandé).
+     * Les {@code owners} d'une définition sont chargés <strong>une seule fois</strong>
+     * ({@code ownersCache}) : plus de requête d'étapes par instance.
+     */
     private Set<String> ownersOfRelevantSteps(
-            WorkflowInstance instance, boolean includeTraversed) {
-        Map<String, List<String>> ownersByStep = steps
-                .findByDefinitionId(instance.getDefinition().getId()).stream()
-                .filter(step -> step.getOwners() != null)
-                .collect(Collectors.toMap(
-                        WorkflowStep::getStepKey, WorkflowStep::getOwners, (first, second) -> first));
+            WorkflowInstance instance,
+            Map<UUID, Map<String, List<String>>> ownersCache,
+            boolean includeTraversed) {
+        Map<String, List<String>> ownersByStep = ownersCache.computeIfAbsent(
+                instance.getDefinition().getId(), this::ownersByStep);
         Set<String> keys = new HashSet<>();
         keys.add(instance.getCurrentStepKey());
         if (includeTraversed) {
@@ -333,6 +362,13 @@ public class WorkflowReadService {
             }
         }
         return owners;
+    }
+
+    private Map<String, List<String>> ownersByStep(UUID definitionId) {
+        return steps.findByDefinitionId(definitionId).stream()
+                .filter(step -> step.getOwners() != null)
+                .collect(Collectors.toMap(
+                        WorkflowStep::getStepKey, WorkflowStep::getOwners, (first, second) -> first));
     }
 
     private List<WorkflowInstance> dedupe(List<WorkflowInstance> instances) {

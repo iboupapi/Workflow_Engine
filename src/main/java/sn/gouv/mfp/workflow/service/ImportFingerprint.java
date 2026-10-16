@@ -79,6 +79,7 @@ public final class ImportFingerprint {
                                 ? List.of()
                                 : new ArrayList<>(step.owners()).stream().sorted().toList();
                         entry.put("owners", owners);
+                        entry.put("processingStep", Boolean.TRUE.equals(step.processingStep()));
                         return entry;
                     })
                     .toList();

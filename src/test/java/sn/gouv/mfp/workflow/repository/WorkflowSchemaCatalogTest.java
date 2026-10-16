@@ -48,6 +48,7 @@ class WorkflowSchemaCatalogTest {
                 "idx_instance_status",
                 "idx_step_definition",
                 "idx_transition_source",
-                "idx_audit_key_time");
+                "idx_audit_key_time",
+                "idx_workflow_instance_status_rejected");
     }
 }

@@ -44,14 +44,15 @@ est refusée à l'import (400). Une liste vide signifie « aucune condition auto
 | `type`                 | enum         | `START`, `TASK` ou `END`                                     |
 | `requiredDataOnValidate` | list[string] | Données obligatoires à toute action positive sur l'étape (absente, nulle ou blanche = 400 ; jamais contrôlé sur `REJETER`) |
 | `owners`               | list[string] | Rôles responsables de l'étape : boîte de réception **et** droit d'agir (`/start`, `/transition`). Absent = étape sans action possible (refus par défaut). Le rôle réservé `ADMIN` y est **interdit** (un administrateur n'est pas validateur) ; mappings métier à confirmer au §14 |
+| `processingStep`       | bool         | (facultatif) Étape de traitement de référence, cible de la reprise `RESPONSABLE_TRAITEMENT` après rejet. **Au plus une** étape marquée par circuit (sinon 400) ; **obligatoire** si une transition utilise la cible `RESPONSABLE_TRAITEMENT` (sinon 400) |
 
 ## Bloc `transitions`
 
 | Champ       | Type   | Règle                                                                                          |
 |-------------|--------|-------------------------------------------------------------------------------------------------|
 | `source`    | string | Doit référencer une étape déclarée, sinon 400                                                  |
-| `action`    | string | Déclencheur libre (ex. `VALIDER`, `REJETER`, `TRANSMETTRE`) ; `REJETER` a un traitement dédié (mémorisation de l'étape émettrice, données non contrôlées) ; `IMPUTER` désigne la personne via la variable `assignee` (400 sans elle, traçée en `to_actor`) ; `REJET_DEFINITIF` clôt en `CANCELLED` |
-| `target`    | string | Étape déclarée, ou cible virtuelle : `INITIATEUR` (étape d'initiation via l'historique), `ETAPE_PRECEDENTE` (dernière étape traversée), `RESPONSABLE_TRAITEMENT` (dernière étape où l'imputé a agi, sinon précédente) |
+| `action`    | string | Déclencheur libre (ex. `VALIDER`, `REJETER`, `TRANSMETTRE`) ; `REJETER` a un traitement dédié (mémorisation de l'étape émettrice, données non contrôlées) ; `IMPUTER` désigne la personne via la variable `assignee` (400 sans elle, traçée en `to_actor`) ; `REJET_DEFINITIF` clôt le dossier en `REJECTED_FINAL` (rejet administratif définitif, distinct de l'annulation usager `CANCELLED`) |
+| `target`    | string | Étape déclarée, ou cible virtuelle : `INITIATEUR` (étape d'initiation via l'historique), `ETAPE_PRECEDENTE` (dernière étape traversée), `RESPONSABLE_TRAITEMENT` (étape de traitement de référence du circuit, `processingStep: true`) |
 | `condition` | string | Expression SpEL **facultative** ; absente = transition inconditionnelle (repli évalué en dernier) |
 
 > Il n'existe pas de bloc `outputs:` : une donnée produite en cours de circuit

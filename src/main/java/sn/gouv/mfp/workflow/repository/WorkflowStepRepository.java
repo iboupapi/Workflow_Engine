@@ -11,4 +11,7 @@ public interface WorkflowStepRepository extends JpaRepository<WorkflowStep, UUID
     List<WorkflowStep> findByDefinitionId(UUID definitionId);
 
     Optional<WorkflowStep> findByDefinitionIdAndStepKey(UUID definitionId, String stepKey);
+
+    /** Étape de traitement de référence (processingStep: true) : au plus une par définition. */
+    Optional<WorkflowStep> findFirstByDefinitionIdAndProcessingStepTrue(UUID definitionId);
 }

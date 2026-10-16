@@ -118,7 +118,8 @@ class WorkflowControllerTest {
     @Test
     void transition_shouldReturn200WithAdvancedInstance() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), eq("VALIDER"), eq("agent-002"), any(), any()))
+        when(executionService.executeTransition(
+                        eq(id), eq("VALIDER"), eq("agent-002"), any(), any(), any()))
                 .thenReturn(givenInstance("DGFP", InstanceStatus.COMPLETED));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -134,7 +135,7 @@ class WorkflowControllerTest {
     @Test
     void transition_onCompletedInstance_shouldReturn409() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowConflictException("Dossier non actif"));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -148,7 +149,7 @@ class WorkflowControllerTest {
     @Test
     void transition_withInvalidAction_shouldReturn400() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowValidationException("Aucune transition valide"));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -176,7 +177,7 @@ class WorkflowControllerTest {
     @Test
     void transition_missingRequiredData_shouldReturn400() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
                 .thenThrow(new MissingRequiredDataException(
                         "Validation impossible. Donnée(s) obligatoire(s) manquante(s) "
                                 + "pour l'étape [NUMEROTEUR] : [numeroOfficiel]."));
