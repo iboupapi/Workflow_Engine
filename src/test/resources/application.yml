@@ -1,0 +1,6 @@
+# Configuration de test : active le profil `migrate` pour que le schéma soit
+# migré (compte propriétaire) avant la validation Hibernate (compte applicatif).
+# Variables requises : SPRING_DATASOURCE_PASSWORD (app), FLYWAY_OWNER_PASSWORD (owner).
+spring:
+  profiles:
+    active: migrate

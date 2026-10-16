@@ -1,0 +1,14 @@
+# Profil `migrate` : applique les migrations Flyway sous le compte propriétaire,
+# AVANT tout démarrage applicatif (recette 12.7). Usage déploiement et tests :
+#   SPRING_PROFILES_ACTIVE=migrate FLYWAY_OWNER_PASSWORD=... ./mvnw spring-boot:run
+# En production, préférer le plugin Maven (mvnw flyway:migrate) : l'application
+# démarrée avec ce profil servirait le trafic pendant la migration.
+spring:
+  flyway:
+    enabled: true
+    # Bases existantes sans historique : marquage baseline V1 (non rejouée) puis V2+.
+    # Bases neuves : V1+ exécutées par le compte propriétaire ci-dessous.
+    baseline-on-migrate: true
+    baseline-version: 1
+    user: ${FLYWAY_OWNER_USER:workflow_owner}
+    password: ${FLYWAY_OWNER_PASSWORD:}

@@ -1,0 +1,164 @@
+package sn.gouv.mfp.workflow.web.security;
+
+import com.nimbusds.jwt.JWTParser;
+import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationManagerResolver;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+
+/**
+ * Validation multi-émetteurs des jetons JWT (cahier de recette 2.2 à 2.4 : signature,
+ * émetteur, audience et expiration vérifiés — sinon 401).
+ * <p>
+ * L'émetteur est lu SANS vérification dans la revendication {@code iss}, puis le jeton
+ * est vérifié contre la configuration de CET émetteur. Émetteur inconnu ou jeton
+ * illisible : 401, sans accès au moteur.
+ */
+@Configuration
+@EnableConfigurationProperties({JwtProperties.class, AdminProperties.class})
+public class JwtAuthConfig {
+
+    private final BearerTokenResolver bearerResolver = new DefaultBearerTokenResolver();
+
+    /**
+     * Résout le gestionnaire d'authentification selon l'émetteur déclaré du jeton.
+     * Carte vide = aucun jeton accepté.
+     */
+    @Bean
+    AuthenticationManagerResolver<HttpServletRequest> jwtAuthenticationManagerResolver(
+            JwtProperties properties, AdminProperties admins) {
+        Map<String, AuthenticationManager> managers = new LinkedHashMap<>();
+        if (properties.issuers() != null) {
+            properties.issuers().forEach((name, issuer) ->
+                    managers.put(issuer.issuer(), authenticationManager(name, issuer, admins)));
+        }
+        return request -> {
+            String token = bearerResolver.resolve(request);
+            String issuer;
+            try {
+                issuer = JWTParser.parse(token).getJWTClaimsSet().getIssuer();
+            } catch (ParseException e) {
+                throw new InvalidBearerTokenException("Jeton illisible.");
+            }
+            AuthenticationManager manager = managers.get(issuer);
+            if (manager == null) {
+                throw new InvalidBearerTokenException(
+                        "Émetteur '" + issuer + "' non reconnu.");
+            }
+            return manager;
+        };
+    }
+
+    private AuthenticationManager authenticationManager(
+            String name, JwtProperties.IssuerProperties issuer, AdminProperties admins) {
+        NimbusJwtDecoder decoder = decoder(name, issuer);
+        OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(
+                JwtClaimNames.AUD,
+                audiences -> audiences != null && audiences.contains(issuer.audience()));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                new JwtTimestampValidator(), audience));
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        String rolesClaim = issuer.rolesClaim() != null && !issuer.rolesClaim().isBlank()
+                ? issuer.rolesClaim()
+                : "roles";
+        converter.setJwtGrantedAuthoritiesConverter(
+                jwt -> authorities(jwt, rolesClaim, issuer.roleMapping(), admins));
+        JwtAuthenticationProvider provider = new JwtAuthenticationProvider(decoder);
+        provider.setJwtAuthenticationConverter(converter);
+        return provider::authenticate;
+    }
+
+    /**
+     * Autorités Spring Security accordées à un jeton :
+     * <ul>
+     *   <li>rôles <strong>moteur</strong> : traduits depuis les rôles du jeton par la
+     *   correspondance de l'émetteur (ou identité si aucune correspondance) — un rôle
+     *   du jeton non reconnu n'accorde rien ;</li>
+     *   <li>{@code ROLE_ADMIN} : uniquement si le sujet du jeton est un administrateur
+     *   nommé ({@code auth.admin.subjects}).</li>
+     * </ul>
+     */
+    private List<GrantedAuthority> authorities(
+            Jwt jwt,
+            String rolesClaim,
+            Map<String, List<String>> roleMapping,
+            AdminProperties admins) {
+        Set<String> engineRoles = engineRoles(jwt.getClaimAsStringList(rolesClaim), roleMapping);
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        engineRoles.stream()
+                .filter(role -> role != null && !role.isBlank())
+                .forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
+        if (jwt.getSubject() != null && admins.subjectsOrEmpty().contains(jwt.getSubject())) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        }
+        return authorities;
+    }
+
+    /**
+     * Rôles moteur dérivés des rôles du jeton. Sans correspondance, identité (le rôle du
+     * jeton est le rôle moteur) ; avec correspondance, un rôle moteur est retenu si le
+     * jeton porte l'un de ses rôles acceptés. Un rôle du jeton non reconnu ne donne rien.
+     */
+    static Set<String> engineRoles(
+            List<String> tokenRoles, Map<String, List<String>> roleMapping) {
+        Set<String> engineRoles = new LinkedHashSet<>();
+        if (tokenRoles == null) {
+            return engineRoles;
+        }
+        if (roleMapping == null || roleMapping.isEmpty()) {
+            engineRoles.addAll(tokenRoles);
+        } else {
+            roleMapping.forEach((engineRole, accepted) -> {
+                if (accepted != null && accepted.stream().anyMatch(tokenRoles::contains)) {
+                    engineRoles.add(engineRole);
+                }
+            });
+        }
+        return engineRoles;
+    }
+
+    private NimbusJwtDecoder decoder(String name, JwtProperties.IssuerProperties issuer) {
+        boolean hasHmac = issuer.hmacSecret() != null && !issuer.hmacSecret().isBlank();
+        boolean hasJwks = issuer.jwksUri() != null && !issuer.jwksUri().isBlank();
+        if (hasHmac == hasJwks) {
+            throw new IllegalArgumentException("Émetteur '" + name + "' : déclarer EXACTEMENT "
+                    + "UNE source de clés (hmac-secret pour le test local, jwks-uri sinon).");
+        }
+        if (issuer.issuer() == null || issuer.issuer().isBlank()
+                || issuer.audience() == null || issuer.audience().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Émetteur '" + name + "' : issuer et audience sont obligatoires.");
+        }
+        if (hasHmac) {
+            return NimbusJwtDecoder.withSecretKey(new SecretKeySpec(
+                            issuer.hmacSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"))
+                    .build();
+        }
+        return NimbusJwtDecoder.withJwkSetUri(issuer.jwksUri()).build();
+    }
+}

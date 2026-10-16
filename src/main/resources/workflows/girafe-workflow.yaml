@@ -1,0 +1,248 @@
+# ==============================================================================
+# CONFIGURATION WORKFLOW GÉNÉRIQUE : GIRAFE (Actes Administratifs)
+# Points « à confirmer » signalés pour l'atelier métier : cibles de rejet
+# (INITIATEUR ou validateur précédent), niveaux des directions, stratégie de reprise.
+# ==============================================================================
+definition:
+  key: "GIRAFE_ACTES"
+  name: "Circuit de Validation des Actes Administratifs"
+  version: 1
+
+# Configuration globale des règles métiers
+  settings:
+    # Plafond par type d'acte : maximum 1 dossier ACTIVE par initiateur et par nature d'acte.
+    # Exemple : un agent ne peut pas avoir deux projets "ARRETE" en cours simultanément.
+    maxActiveInstancesPerType: 1
+    # Plafond par initiateur (tel quel, tel quel) — laissé à 0 par défaut si non utilisé.
+    maxActiveInstancesPerInitiator: 0
+    # Stratégie de reprise PROVISOIRE : FROM_START fait reprendre le circuit depuis le
+    # début après un rejet. FROM_REJECTING_STEP renverrait directement à l'étape émettrice
+    # en sautant la hiérarchie (ex. retour à la DPB sans revoir chef de bureau, chef de
+    # division ni S-Visa) — à trancher à l'atelier métier. Voir docs/yaml-format-schema.md.
+    resumeStrategyDefault: "FROM_START"
+
+# Points d'entrée autorisés selon le rôle de l'initiateur
+entryPoints:
+  - role: "AGENT_BUREAU"
+    startStepKey: "AGENT_BUREAU"
+  - role: "CHEF_BUREAU"
+    startStepKey: "CHEF_BUREAU"
+  - role: "CHEF_DIVISION"
+    startStepKey: "CHEF_DIVISION"
+
+# Clés de dossier autorisées dans les conditions SpEL (bloc obligatoire : toute autre clé
+# est refusée à l'import). Étendre cette liste avant d'utiliser une nouvelle clé en condition.
+variables:
+  - "circuit"
+  - "natureActe"
+  - "numeroOfficiel"
+
+# Définition des Étapes (points d'entrée : AGENT_BUREAU, CHEF_BUREAU, CHEF_DIVISION ;
+# niveaux des directions à confirmer avec le métier)
+steps:
+  # owners : rôles (du jeton, traduits par la correspondance d'émetteur) responsables de
+  # l'étape. Ils gouvernent à la fois la boîte de réception ET le droit d'agir sur l'étape
+  # (/start, /transition). Étape sans owners = aucune action possible (refus par défaut).
+  # Le rôle réservé ADMIN y est interdit (un administrateur n'est pas validateur).
+  - key: "AGENT_BUREAU"
+    name: "Initiation - Agent de Bureau"
+    type: "START"
+    requiredDataOnValidate:
+      - "circuit"
+    owners:
+      - "AGENT_BUREAU"
+
+  - key: "CHEF_BUREAU"
+    name: "Niveau 2 - Chef de Bureau"
+    type: "TASK"
+    requiredDataOnValidate:
+      - "circuit"
+    owners:
+      - "CHEF_BUREAU"
+
+  - key: "CHEF_DIVISION"
+    name: "Niveau 3 - Chef de Division"
+    type: "TASK"
+    requiredDataOnValidate:
+      - "circuit"
+    owners:
+      - "CHEF_DIVISION"
+
+  - key: "S_VISA"
+    name: "Niveau 4 - Division S-Visa (Audit & Contrôle)"
+    type: "TASK"
+    owners:
+      - "S_VISA"
+
+  # --- Directions Financières & Spécialisées (niveaux à confirmer : le document officiel
+  # n'attribue pas ces niveaux, et une note place la DPB au niveau 9) ---
+  - key: "DPR"
+    name: "Direction des Pensions et Retraite (niveau à confirmer)"
+    type: "TASK"
+    owners:
+      - "DPR"
+
+  - key: "DS"
+    name: "Direction de la Solde (niveau à confirmer)"
+    type: "TASK"
+    owners:
+      - "DS"
+
+  - key: "DPB"
+    name: "Direction de la Programmation Budgétaire / Budget (niveau à confirmer)"
+    type: "TASK"
+    owners:
+      - "DPB"
+
+  - key: "DGFP"
+    name: "Direction de la Fonction Publique (niveau à confirmer)"
+    type: "TASK"
+    owners:
+      - "DGFP"
+
+  # Note : Si le "Niveau 9" métier s'avère être une étape distincte post-DGFP,
+  # insérer le nœud NIVEAU_9 ici via simple mise à jour YAML.
+
+  - key: "SG_CABINET"
+    name: "Niveau 10 - Secrétariat Général / Direction de Cabinet"
+    type: "TASK"
+    owners:
+      - "SG_CABINET"
+
+  - key: "MINISTRE"
+    name: "Niveau 11 - Monsieur le Ministre"
+    type: "TASK"
+    owners:
+      - "MINISTRE"
+
+  - key: "SGG"
+    name: "Niveau 12 - Secrétariat Général du Gouvernement"
+    type: "TASK"
+    owners:
+      - "SGG"
+
+  - key: "NUMEROTEUR"
+    name: "Niveau 13 - Le Numéroteur (Attribution du Numéro Officiel)"
+    type: "TASK"
+    # Saisie obligatoire du numéro officiel lors de la validation
+    requiredDataOnValidate:
+      - "numeroOfficiel"
+    owners:
+      - "NUMEROTEUR"
+
+  - key: "OFFICIEL_VALIDE"
+    name: "Acte Clôturé et Numéroté"
+    type: "END"
+
+# Définition des Transitions & Routage Conditionnel (SpEL)
+transitions:
+  # --- Parcours Initial ---
+  - source: "AGENT_BUREAU"
+    action: "TRANSMETTRE"
+    target: "CHEF_BUREAU"
+
+  - source: "CHEF_BUREAU"
+    action: "VALIDER"
+    target: "CHEF_DIVISION"
+
+  - source: "CHEF_DIVISION"
+    action: "VALIDER"
+    target: "S_VISA"
+
+  # --- AIGUILLAGE DU S-VISA (Séparation des 3 Circuits) ---
+  # 1. Circuit COURT (Ex: Avancement) -> Directement DGFP
+  - source: "S_VISA"
+    action: "VALIDER"
+    target: "DGFP"
+    condition: "#variables['circuit'] == 'COURT'"
+
+  # 2. Circuit PLUS_LONG (Ex: Retraite) -> Passe par DPR
+  - source: "S_VISA"
+    action: "VALIDER"
+    target: "DPR"
+    condition: "#variables['circuit'] == 'PLUS_LONG'"
+
+  # 3. Circuit LONG -> Passe par Solde (DS). Sans repli : une valeur absente ou
+  # fautive ('long', 'LONGUE') est refusée au lieu d'être routée au hasard.
+  - source: "S_VISA"
+    action: "VALIDER"
+    target: "DS"
+    condition: "#variables['circuit'] == 'LONG'"
+
+  # --- Chaînage des Visas Financiers ---
+  - source: "DPR"
+    action: "VALIDER"
+    target: "DS"
+
+  - source: "DS"
+    action: "VALIDER"
+    target: "DPB"
+
+  - source: "DPB"
+    action: "VALIDER"
+    target: "DGFP"
+
+  # --- Fin Commune (Post-DGFP) ---
+  - source: "DGFP"
+    action: "VALIDER"
+    target: "SG_CABINET"
+
+  - source: "SG_CABINET"
+    action: "VALIDER"
+    target: "MINISTRE"
+
+  - source: "MINISTRE"
+    action: "VALIDER"
+    target: "SGG"
+
+  - source: "SGG"
+    action: "VALIDER"
+    target: "NUMEROTEUR"
+
+  - source: "NUMEROTEUR"
+    action: "VALIDER"
+    target: "OFFICIEL_VALIDE"
+
+  # --- RÈGLES DE REJET (cibles à confirmer : le document parle de l'initiateur
+  # OU du validateur précédent — voir §14 ; les niveaux 10 à 12 ci-dessous suivent
+  # la même cible par défaut, à confirmer) ---
+  # Exception S-Visa : Un rejet au S-Visa renvoie TOUJOURS au Chef de Division (Niveau 3)
+  - source: "S_VISA"
+    action: "REJETER"
+    target: "CHEF_DIVISION"
+
+  - source: "CHEF_BUREAU"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "CHEF_DIVISION"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "DPR"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "DS"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "DPB"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "DGFP"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "SG_CABINET"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "MINISTRE"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "SGG"
+    action: "REJETER"
+    target: "INITIATEUR"

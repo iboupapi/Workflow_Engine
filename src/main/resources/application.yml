@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: workflow-engine
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/workflow_db}
+    # Compte applicatif à privilèges minimaux (recette 8.5). Aucun mot de passe
+    # par défaut : démarrage refusé net sans SPRING_DATASOURCE_PASSWORD.
+    username: ${SPRING_DATASOURCE_USERNAME:workflow_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      # Le schéma est versionné par Flyway ; Hibernate ne fait que valider (recette 12.7).
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    # Migrations DÉSACTIVÉES dans l'application : le déploiement applique les
+    # migrations via le plugin Maven Flyway sous le compte propriétaire, AVANT le
+    # démarrage (recette 12.7). L'application runtime ne migre jamais et ne détient
+    # jamais les identifiants du propriétaire (garde-fou testé : FlywayProdGuardTest).
+    enabled: false
+logging:
+  level:
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    sn.gouv.mfp.workflow: INFO
+
+server:
+  port: 8080
+
+management:
+  # Supervision minimale (recette 12.8) : seul l'état de santé est exposé,
+  # sans détails (pas de modèle d'autorisation fine à ce stade).
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  # Documentation API : désactiver en production (SWAGGER_ENABLED=false, recette 12.1).
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+auth:
+  admin:
+    # Administrateurs NOMMÉS : sujets (`sub`) des jetons JWT autorisés à administrer.
+    # Remplace le jeton fixe intérimaire (X-Admin-Token, retiré). Sans sujet nommé,
+    # personne n'est administrateur (refus par défaut). Un administrateur administre et
+    # supervise ; il ne valide JAMAIS une étape (le rôle réservé ADMIN est refusé dans owners).
+    subjects: ${ADMIN_SUBJECTS:}
+  jwt:
+    # Émetteurs JWT configurés (recette §2) : vide = aucun jeton accepté.
+    # Chaque émetteur peut déclarer une correspondance role-mapping
+    # (rôle moteur utilisé dans owners -> rôles portés par le jeton).
+    # Exemple d'émetteur de test local (HMAC) — réels à confirmer avec le ministère :
+    # issuers:
+    #   test:
+    #     issuer: "https://test.mfp.local"
+    #     audience: "workflow-api"
+    #     hmac-secret: ${TEST_ISSUER_SECRET:}
+    #     roles-claim: "roles"
+    #     role-mapping:
+    #       AGENT_BUREAU: ["AGENT_BUREAU"]
+    #       CITOYEN: ["CITOYEN"]
+    issuers: {}

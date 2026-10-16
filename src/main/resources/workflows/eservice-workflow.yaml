@@ -1,0 +1,119 @@
+# ==============================================================================
+# BROUILLON — CIRCUIT E-SERVICE (Demandes citoyennes). NON UTILISABLE POUR LE
+# PILOTE tant que la cible RESPONSABLE_TRAITEMENT n'existe pas dans le moteur.
+# Hypothèses signalées ci-dessous, à valider avec le métier (§14 du cahier de recette).
+# ==============================================================================
+definition:
+  key: "E_SERVICE_DEMANDE"
+  name: "Circuit des demandes E-Service (brouillon)"
+  version: 1
+
+settings:
+  # Reprise PROVISOIRE : le rapport ne tranche pas la reprise après correction.
+  # FROM_START fait reprendre le circuit depuis le début (voir docs/yaml-format-schema.md).
+  resumeStrategyDefault: "FROM_START"
+
+entryPoints:
+  - role: "CITOYEN"
+    startStepKey: "DEPOT_CITOYEN"
+
+# Bloc obligatoire mais vide : aucune condition SpEL dans ce fichier, donc aucune
+# clé n'est autorisée en condition (toute condition serait refusée à l'import).
+variables: []
+
+steps:
+  # owners : rôles responsables de l'étape (boîte de réception + droit d'agir /start,
+  # /transition). Le rôle réservé ADMIN y est interdit. Rôles à confirmer avec le métier.
+  - key: "DEPOT_CITOYEN"
+    name: "Dépôt citoyen"
+    type: "START"
+    owners:
+      - "CITOYEN"
+
+  - key: "CHEF_DIVISION"
+    name: "Chef de division"
+    type: "TASK"
+    owners:
+      - "CHEF_DIVISION"
+
+  - key: "AGENT_TRAITEMENT"
+    name: "Agent traitant"
+    type: "TASK"
+    owners:
+      - "AGENT_TRAITEMENT"
+
+  - key: "DLEC"
+    name: "Direction DLEC (ne pas expanser : le rapport dit seulement « Direction DLEC »)"
+    type: "TASK"
+    owners:
+      - "DLEC"
+
+  - key: "DGFP"
+    name: "Direction de la Fonction Publique"
+    type: "TASK"
+    owners:
+      - "DGFP"
+
+  - key: "SG"
+    name: "Secrétariat général"
+    type: "TASK"
+    owners:
+      - "SG"
+
+  - key: "DEMANDE_TRAITEE"
+    name: "Demande traitée"
+    type: "END"
+
+transitions:
+  - source: "DEPOT_CITOYEN"
+    action: "SOUMETTRE"
+    target: "CHEF_DIVISION"
+
+  # Imputation = action générique : l'historique garde qui a imputé à qui via actorId ;
+  # l'attribution formelle (assignee) et le responsable du traitement relèvent
+  # d'un chantier moteur dédié (cf. schéma, §5/§13.4 du cahier de recette).
+  - source: "CHEF_DIVISION"
+    action: "IMPUTER"
+    target: "AGENT_TRAITEMENT"
+
+  - source: "AGENT_TRAITEMENT"
+    action: "TRANSMETTRE"
+    target: "CHEF_DIVISION"
+
+  # Traitement direct (le chef valide lui-même) et retour de délégation convergent ici.
+  - source: "CHEF_DIVISION"
+    action: "VALIDER"
+    target: "DLEC"
+
+  - source: "DLEC"
+    action: "VALIDER"
+    target: "DGFP"
+
+  - source: "DGFP"
+    action: "VALIDER"
+    target: "SG"
+
+  - source: "SG"
+    action: "VALIDER"
+    target: "DEMANDE_TRAITEE"
+
+  # Approximation PROVISOIRE : le rapport impose le retour au responsable du traitement
+  # (l'agent après imputation, le chef après traitement direct), cible non supportée
+  # par le moteur. En attendant, ces rejets renvoient au chef de division, qui peut
+  # réimputer à l'agent. Seul le rejet du chef de division à la réception garde la
+  # cible INITIATEUR (le citoyen), si le ministère confirme ce renvoi.
+  - source: "CHEF_DIVISION"
+    action: "REJETER"
+    target: "INITIATEUR"
+
+  - source: "AGENT_TRAITEMENT"
+    action: "REJETER"
+    target: "CHEF_DIVISION"
+
+  - source: "DLEC"
+    action: "REJETER"
+    target: "CHEF_DIVISION"
+
+  - source: "DGFP"
+    action: "REJETER"
+    target: "CHEF_DIVISION"
