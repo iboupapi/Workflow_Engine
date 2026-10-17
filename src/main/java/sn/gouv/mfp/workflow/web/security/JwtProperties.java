@@ -21,7 +21,11 @@ public record JwtProperties(Map<String, IssuerProperties> issuers) {
      * @param audience     valeur exigée dans {@code aud}
      * @param hmacSecret   clé partagée (émetteur de test local uniquement)
      * @param jwksUri      jeu de clés distant (annuaire, portail)
-     * @param rolesClaim   revendication liste portant les rôles du jeton
+     * @param rolesClaim   nom de la revendication contenant les rôles (défaut :
+     *                     {@code roles}). Doit pointer vers un <strong>tableau de chaînes
+     *                     au niveau racine</strong> du jeton. Les chemins imbriqués (ex.
+     *                     {@code realm_access.roles}) ne sont pas résolus : l'émetteur SSO
+     *                     doit exposer la liste à la racine (ou via un mapper Keycloak).
      * @param roleMapping  correspondance <strong>rôle moteur → rôles du jeton</strong> :
      *                     un rôle moteur (celui employé dans {@code owners} des étapes)
      *                     est accordé dès que le jeton porte l'un des rôles listés.

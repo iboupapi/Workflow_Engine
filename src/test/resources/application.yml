@@ -4,3 +4,31 @@
 spring:
   profiles:
     active: migrate
+  application:
+    name: workflow-engine
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/workflow_db}
+    username: ${SPRING_DATASOURCE_USERNAME:workflow_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    user: ${FLYWAY_OWNER_USER:workflow_owner}
+    password: ${FLYWAY_OWNER_PASSWORD:}
+
+auth:
+  admin:
+    subjects: ${ADMIN_SUBJECTS:}
+  jwt:
+    issuers: {}

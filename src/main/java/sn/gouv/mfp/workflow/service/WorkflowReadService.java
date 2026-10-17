@@ -83,12 +83,6 @@ public class WorkflowReadService {
                         .collect(Collectors.toSet());
                 return new Viewer(jwt.getName(), roles, roles.contains("ADMIN"));
             }
-            if (authentication != null
-                    && authentication.isAuthenticated()
-                    && authentication.getAuthorities().stream()
-                            .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
-                return new Viewer(authentication.getName(), Set.of("ADMIN"), true);
-            }
             return new Viewer(null, Set.of(), false);
         }
     }

@@ -45,11 +45,11 @@ management:
       show-details: never
 
 springdoc:
-  # Documentation API : désactiver en production (SWAGGER_ENABLED=false, recette 12.1).
+  # Documentation API : désactivée par défaut en production (SWAGGER_ENABLED=true pour activer).
   api-docs:
-    enabled: ${SWAGGER_ENABLED:true}
+    enabled: ${SWAGGER_ENABLED:false}
   swagger-ui:
-    enabled: ${SWAGGER_ENABLED:true}
+    enabled: ${SWAGGER_ENABLED:false}
 
 auth:
   admin:

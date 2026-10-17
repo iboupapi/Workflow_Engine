@@ -5,10 +5,13 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 
 /**
- * Identité d'exécution (cahier de recette 2.5) : avec un JWT, l'acteur est TOUJOURS
- * le sujet du jeton — la valeur du corps de requête est ignorée (elle ne peut ni
- * usurper ni compléter l'identité). Sans JWT (jeton administrateur intérimaire),
- * l'acteur du corps est conservé.
+ * Identité certifiée de l'acteur d'exécution (cahier de recette 2.5).
+ * <p>
+ * Avec un JWT, l'acteur est TOUJOURS le sujet du jeton (claim {@code sub}) : la
+ * valeur {@code actorId}/{@code initiatorId} du corps de requête est ignorée et ne
+ * peut donc jamais usurper ni compléter l'identité. Le repli sur la valeur du corps
+ * n'existe que pour les tests : en production, une requête sans JWT est rejetée
+ * (401) par la chaîne de sécurité avant d'atteindre le contrôleur.
  */
 @Component
 public class RequestActor {

@@ -26,7 +26,7 @@ Un administrateur **administre et supervise** ; il **n'est jamais validateur d'�
 | `audience`     | oui         | Valeur exigée dans `aud`                                          |
 | `hmac-secret`  | OU `jwks-uri` (exactement un des deux) | Clé partagée (émetteur de test local uniquement) |
 | `jwks-uri`     | OU `hmac-secret` | Jeu de clés distant (annuaire, portail)                        |
-| `roles-claim`  | non (`roles` par défaut) | Revendication **liste** des rôles portés par le jeton  |
+| `roles-claim`  | non (`roles` par défaut) | Revendication **liste** des rôles, au **niveau racine** du jeton  |
 | `role-mapping` | non         | Correspondance **rôle moteur → rôles du jeton** (voir ci-dessous) |
 
 Vérifiés à chaque requête : signature, émetteur, audience, expiration — sinon 401.
@@ -47,11 +47,21 @@ auth:
         issuer: "https://annuaire.mfp.gouv.sn"
         audience: "workflow-api"
         jwks-uri: "https://annuaire.mfp.gouv.sn/.well-known/jwks.json"
-        roles-claim: "realm_access.roles"     # exemple
+        roles-claim: "roles"                  # claim liste à la racine (voir ci-dessous)
         role-mapping:
           CHEF_DIVISION: ["GRADE_CHEF_DIV", "ROLE_CHEFDIV"]
           DGFP:          ["DAFP_DGFP"]
 ```
+
+#### Format de `roles-claim`
+
+Le moteur lit `roles-claim` comme un **tableau de chaînes au niveau racine** du
+payload JWT : `{"roles": ["AGENT_BUREAU", "CHEF_DIVISION"]}` ou `{"groups": [...]}`.
+
+**Claims imbriqués :** les chemins à points (type `realm_access.roles`) ne sont
+**pas** résolus. L'émetteur SSO doit soit exposer la liste à la racine du jeton,
+soit la remonter via une règle de mapping Keycloak afin qu'elle apparaisse comme
+une revendication de premier niveau.
 
 Un rôle moteur est accordé dès que le jeton porte l'un des rôles listés. **Sans**
 `role-mapping`, **aucun rôle n'est accordé** (défaut sûr : jamais l'identité du jeton).

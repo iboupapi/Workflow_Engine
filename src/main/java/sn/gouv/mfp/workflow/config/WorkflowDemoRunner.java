@@ -30,7 +30,7 @@ import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
  * Idempotent : ne recrée rien si la définition existe déjà. Désactivable avec le profil {@code nodemo}.
  */
 @Component
-@Profile("!nodemo")
+@Profile("demo")
 public class WorkflowDemoRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowDemoRunner.class);

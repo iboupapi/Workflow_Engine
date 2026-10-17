@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Limitation de débit des endpoints d'administration (recette 12.5) : fenêtre fixe
+ * Limitation de débit des endpoints d'administration : fenêtre fixe
  * de 60 secondes, 120 requêtes maximum par adresse cliente, au-delà 429 explicite.
  * <p>
  * Mécanisme volontairement simple (compteurs en mémoire, pas de quota distribué) :
