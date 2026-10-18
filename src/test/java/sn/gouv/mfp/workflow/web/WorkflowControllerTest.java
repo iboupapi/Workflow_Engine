@@ -3,11 +3,13 @@ package sn.gouv.mfp.workflow.web;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import sn.gouv.mfp.workflow.domain.definition.EntryPoint;
+import sn.gouv.mfp.workflow.domain.definition.StepType;
+import sn.gouv.mfp.workflow.domain.definition.VariableDeclaration;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowDefinition;
 import sn.gouv.mfp.workflow.domain.execution.InstanceStatus;
 import sn.gouv.mfp.workflow.domain.execution.WorkflowInstance;
@@ -29,6 +34,7 @@ import sn.gouv.mfp.workflow.exception.WorkflowNotFoundException;
 import sn.gouv.mfp.workflow.exception.WorkflowQuotaExceededException;
 import sn.gouv.mfp.workflow.exception.WorkflowValidationException;
 import sn.gouv.mfp.workflow.service.WorkflowAuthorizationService;
+import sn.gouv.mfp.workflow.service.WorkflowDefinitionViewService;
 import sn.gouv.mfp.workflow.service.WorkflowExecutionService;
 import sn.gouv.mfp.workflow.service.WorkflowReadService;
 import sn.gouv.mfp.workflow.web.dto.WorkflowDtos.StartWorkflowRequest;
@@ -47,6 +53,9 @@ class WorkflowControllerTest {
 
     @Autowired
     private WorkflowExecutionService executionService;
+
+    @Autowired
+    private WorkflowDefinitionViewService definitionViewService;
 
     @TestConfiguration
     static class MockConfig {
@@ -69,6 +78,11 @@ class WorkflowControllerTest {
         @Bean
         WorkflowAuthorizationService authorizationService() {
             return Mockito.mock(WorkflowAuthorizationService.class);
+        }
+
+        @Bean
+        WorkflowDefinitionViewService definitionViewService() {
+            return Mockito.mock(WorkflowDefinitionViewService.class);
         }
 
         @Bean
@@ -205,6 +219,33 @@ class WorkflowControllerTest {
                         .content(objectMapper.writeValueAsString(
                                 new StartWorkflowRequest("agent-001", null, "S_VISA"))))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getDefinition_shouldReturnStepsTransitionsAndVariables() throws Exception {
+        when(definitionViewService.view("E_SERVICE_DEMANDE"))
+                .thenReturn(new WorkflowDefinitionViewService.DefinitionView(
+                        "E_SERVICE_DEMANDE",
+                        1,
+                        "Circuit E-Service",
+                        Map.of(),
+                        List.of(new EntryPoint("CITOYEN", "DEPOT_CITOYEN", null)),
+                        List.of(new VariableDeclaration("circuit", "string", true)),
+                        List.of(new WorkflowDefinitionViewService.StepView(
+                                "DEPOT_CITOYEN", "Dépôt citoyen", StepType.START,
+                                List.of("CITOYEN"), List.of())),
+                        List.of(new WorkflowDefinitionViewService.TransitionView(
+                                "DEPOT_CITOYEN", "SOUMETTRE", "CHEF_DIVISION", null, false))));
+
+        mockMvc.perform(get("/api/workflows/E_SERVICE_DEMANDE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.key").value("E_SERVICE_DEMANDE"))
+                .andExpect(jsonPath("$.entryPoints[0].role").value("CITOYEN"))
+                .andExpect(jsonPath("$.variables[0].key").value("circuit"))
+                .andExpect(jsonPath("$.variables[0].required").value(true))
+                .andExpect(jsonPath("$.steps[0].key").value("DEPOT_CITOYEN"))
+                .andExpect(jsonPath("$.steps[0].owners[0]").value("CITOYEN"))
+                .andExpect(jsonPath("$.transitions[0].action").value("SOUMETTRE"));
     }
 
     private WorkflowInstance givenInstance(String stepKey, InstanceStatus status) {
