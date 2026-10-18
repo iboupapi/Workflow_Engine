@@ -3,13 +3,13 @@
 # ci-dessous, à valider avec le métier (§14 du cahier de recette).
 # La cible RESPONSABLE_TRAITEMENT est supportée par le moteur : elle renvoie à
 # l'étape de traitement mémorisée par la transition marquée « setsHandler: true »
-# (exigence MOT-06 : marqueur porté par la TRANSITION de traitement, en délégation
-# comme en direct). Ici le Chef de Division est l'unité responsable : sa validation
-# vers la DLEC (CHEF_DIVISION -VALIDER-> DLEC) porte le marqueur, donc tout rejet
-# d'une autorité supérieure (DLEC, DGFP) lui revient pour arbitrage ou réimputation —
-# que le traitement ait été fait en direct, ou délégué à un agent (dans ce cas
-# AGENT_TRAITEMENT -TRANSMETTRE-> CHEF_DIVISION est marqué aussi, puis la validation
-# du chef, qui la suit, devient le traitement de référence).
+# (exigence MOT-06 : marqueur porté par la TRANSITION de traitement).
+# Règle métier (rapport d'étude) : le rejet revient à la personne responsable du
+# traitement INITIAL — l'agent traitant si la demande lui a été imputée, le chef de
+# division s'il a traité lui-même. Le circuit sépare donc, à la sortie du chef, le
+# traitement direct (VALIDER, marqué) et la validation après délégation
+# (TRANSMETTRE, NON marquée) : sans cette séparation, la validation du chef
+# écraserait le marqueur de l'agent et tout rejet reviendrait au chef à tort.
 # ==============================================================================
 definition:
   key: "E_SERVICE_DEMANDE"
@@ -89,11 +89,19 @@ transitions:
     target: "CHEF_DIVISION"
     setsHandler: true
 
-  # Traitement direct (le chef valide lui-même) et retour de délégation convergent ici.
+  # Traitement direct : le chef traite lui-même. C'est LUI le responsable du traitement,
+  # d'où le marqueur : un rejet de la DLEC/DGFP lui revient.
   - source: "CHEF_DIVISION"
     action: "VALIDER"
     target: "DLEC"
     setsHandler: true
+
+  # Validation après délégation : le dossier porte déjà le marqueur de l'agent
+  # (AGENT_TRAITEMENT -TRANSMETTRE-> CHEF_DIVISION). Le chef ne fait que le transmettre,
+  # donc AUCUN marqueur ici — sinon il écraserait l'agent et le rejet reviendrait au chef.
+  - source: "CHEF_DIVISION"
+    action: "TRANSMETTRE"
+    target: "DLEC"
 
   - source: "DLEC"
     action: "VALIDER"

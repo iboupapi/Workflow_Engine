@@ -23,14 +23,14 @@ import sn.gouv.mfp.workflow.repository.WorkflowStepRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
 
 /**
- * Phase 1 — clôture de l'écart E-Service : le <strong>responsable de traitement</strong> est le
- * Chef de Division, qu'il ait traité en direct ou délégué le traitement à un agent. Un rejet des
- * autorités supérieures (DLEC/DGFP) doit donc toujours revenir au Chef de Division pour arbitrage
- * ou réimputation.
+ * Phase 1 — clôture de l'écart E-Service. Règle métier (rapport d'étude) : le rejet des autorités
+ * supérieures (DLEC/DGFP) revient à la <strong>personne responsable du traitement initial</strong> —
+ * l'agent traitant si la demande lui a été imputée, le chef de division s'il a traité lui-même.
  * <p>
  * Exigence MOT-06 : la cible {@code RESPONSABLE_TRAITEMENT} s'appuie sur le marqueur
- * {@code setsHandler} porté par la <strong>transition de traitement</strong> (délégation ET
- * direct) — le test vérifie d'abord l'emplacement du marqueur, puis les deux scénarios.
+ * {@code setsHandler} porté par la <strong>transition de traitement</strong>. Le traitement direct
+ * (chef) et le traitement délégué (agent) sont deux transitions distinctes ; seule la validation
+ * après délégation n'est pas marquée, pour ne pas écraser le marqueur de l'agent.
  */
 @SpringBootTest
 @Transactional
@@ -84,7 +84,7 @@ class EServiceHandlerRejectTest {
     }
 
     @Test
-    void delegatedTreatment_rejectAtDlec_shouldReturnToChefDivision() throws Exception {
+    void delegatedTreatment_rejectAtDlec_shouldReturnToAgentTraitement() throws Exception {
         String key = loadUniqueKey();
         loaderService.loadAndSaveYamlDefinition(eserviceYamlAs(key));
 
@@ -92,21 +92,22 @@ class EServiceHandlerRejectTest {
                 key, "citoyen-01", null, "DEPOT_CITOYEN");
         executionService.executeTransition(instance.getId(), "SOUMETTRE", "citoyen-01", null, null);
 
-        // Traitement DÉLÉGUÉ : le chef impute à un agent, qui traite et transmet.
+        // Traitement DÉLÉGUÉ : le chef impute à un agent, qui traite et transmet (marqueur = agent).
         executionService.executeTransition(instance.getId(), "IMPUTER", "chef-division-01", null,
                 Map.of("assignee", "agent-traitement-01"));
         executionService.executeTransition(
                 instance.getId(), "TRANSMETTRE", "agent-traitement-01", null, null);
         assertAt(instance.getId(), "CHEF_DIVISION");
 
-        // Le chef valide vers la DLEC (traitement de référence).
-        executionService.executeTransition(instance.getId(), "VALIDER", "chef-division-01", null, null);
+        // Validation après délégation : le chef transmet sans se marquer (marqueur = agent conservé).
+        executionService.executeTransition(
+                instance.getId(), "TRANSMETTRE", "chef-division-01", null, null);
         assertAt(instance.getId(), "DLEC");
 
         WorkflowInstance rejected = executionService.executeTransition(
                 instance.getId(), "REJETER", "dlec-01", "Dossier incomplet", null);
 
-        assertThat(rejected.getCurrentStepKey()).isEqualTo("CHEF_DIVISION");
+        assertThat(rejected.getCurrentStepKey()).isEqualTo("AGENT_TRAITEMENT");
         assertThat(rejected.getStatus()).isEqualTo(InstanceStatus.ACTIVE);
     }
 
