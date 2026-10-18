@@ -58,6 +58,10 @@ class WorkflowHistoryImmutabilityTest {
                 .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
         assertThat(privilegesOf("workflow_definition"))
                 .containsExactlyInAnyOrder("INSERT", "SELECT");
+        assertThat(privilegesOf("request_type"))
+                .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
+        assertThat(privilegesOf("request_type_version"))
+                .containsExactlyInAnyOrder("INSERT", "SELECT");
     }
 
     @Test
@@ -65,7 +69,7 @@ class WorkflowHistoryImmutabilityTest {
     void immutabilityTrigger_shouldExistOnProtectedTables() {
         Number count = jdbc.queryForObject(
                 "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_immutable'", Number.class);
-        assertThat(count.longValue()).isEqualTo(5);
+        assertThat(count.longValue()).isEqualTo(6);
         String body = jdbc.queryForObject(
                 "SELECT pg_get_functiondef('forbid_protected_mutation()'::regprocedure)",
                 String.class);

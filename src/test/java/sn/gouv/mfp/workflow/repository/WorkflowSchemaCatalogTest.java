@@ -30,10 +30,10 @@ class WorkflowSchemaCatalogTest {
     }
 
     @Test
-    void immutabilityTriggers_shouldCoverFiveTables() {
+    void immutabilityTriggers_shouldCoverProtectedTables() {
         Number count = jdbc.queryForObject(
                 "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_immutable'", Number.class);
-        assertThat(count.longValue()).isEqualTo(5);
+        assertThat(count.longValue()).isEqualTo(6);
     }
 
     @Test

@@ -44,6 +44,19 @@
 			<artifactId>hypersistence-utils-hibernate-71</artifactId>
 			<version>3.15.4</version>
 		</dependency>
+		<!--
+			Validation serveur des formulaires (FRM-03) : JSON Schema 2020-12.
+			Version 1.5.9 volontairement retenue : c'est la dernière ligne compatible
+			Jackson 2 (com.fasterxml.jackson), celui qu'utilise le reste du projet
+			(hypersistence, WorkflowDefinitionLoaderService). Les lignes 2.x/3.x du
+			validateur passent à Jackson 3 (tools.jackson) et imposeraient de faire
+			cohabiter deux Jackson dans le même contexte de persistance.
+		-->
+		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>1.5.9</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-json</artifactId>
