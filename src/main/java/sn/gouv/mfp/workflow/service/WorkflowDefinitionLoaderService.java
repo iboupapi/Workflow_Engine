@@ -28,6 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import sn.gouv.mfp.workflow.config.YamlConfig;
 import sn.gouv.mfp.workflow.domain.definition.EntryPoint;
 import sn.gouv.mfp.workflow.domain.definition.StepType;
+import sn.gouv.mfp.workflow.domain.definition.VariableDeclaration;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowDefinition;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowImportAudit;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowStep;
@@ -44,6 +45,7 @@ import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.EntryPointConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.SettingsConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.StepConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.TransitionConfigDTO;
+import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.VariableConfigDTO;
 
 /**
  * Chargeur de configuration YAML : rend le moteur pilotable par la configuration,
@@ -170,7 +172,13 @@ public class WorkflowDefinitionLoaderService {
         definition.setVersion(version);
         definition.setContentHash(fingerprint);
         definition.setSettings(toSettingsMap(config.settings()));
-        Set<String> declaredVars = config.variables() != null ? new HashSet<>(config.variables()) : Set.of();
+        // MOT-10 : les déclarations (clé, type, obligatoire) sont persistées ; les clés servent
+        // aussi de liste blanche pour les conditions SpEL (recette 1.5).
+        List<VariableDeclaration> declarations = toVariableDeclarations(config.variables());
+        Set<String> declaredVars = declarations.stream()
+                .map(VariableDeclaration::key)
+                .collect(Collectors.toSet());
+        definition.setVariableDeclarations(declarations);
         definition.setEntryPoints(toEntryPoints(config.entryPoints(), declaredVars));
         definition = definitions.save(definition);
 
@@ -339,7 +347,18 @@ public class WorkflowDefinitionLoaderService {
                     "YAML invalide : bloc 'variables:' manquant "
                             + "(clés autorisées dans les conditions SpEL).");
         }
-        Set<String> declaredVariables = new HashSet<>(config.variables());
+        Set<String> declaredVariables = new HashSet<>();
+        for (VariableConfigDTO variable : config.variables()) {
+            if (variable == null || variable.key() == null || variable.key().isBlank()) {
+                throw new WorkflowValidationException(
+                        "YAML incohérent : déclaration de variable sans clé.");
+            }
+            if (!declaredVariables.add(variable.key())) {
+                throw new WorkflowValidationException(
+                        "YAML incohérent : variable déclarée en double '" + variable.key() + "'.");
+            }
+            validateVariableType(variable);
+        }
         Set<String> virtualTargets = Set.of(
                 WorkflowExecutionService.INITIATEUR_TARGET,
                 WorkflowExecutionService.PREVIOUS_STEP_TARGET,
@@ -439,5 +458,36 @@ public class WorkflowDefinitionLoaderService {
             }
         }
         return points;
+    }
+
+    /** Types de variable acceptés (MOT-10) ; {@code string} par défaut. */
+    private static final Set<String> VARIABLE_TYPES = Set.of("string", "number", "boolean", "date");
+
+    /** MOT-10 : refuse à l'import un type de variable inconnu (une faute de frappe ne doit
+     *  pas désactiver un contrôle en silence). Un type absent vaut {@code string}. */
+    private void validateVariableType(VariableConfigDTO variable) {
+        String type = variable.type();
+        if (type != null && !type.isBlank()
+                && !VARIABLE_TYPES.contains(type.trim().toLowerCase())) {
+            throw new WorkflowValidationException("YAML incohérent : type de variable inconnu '"
+                    + variable.type() + "' pour '" + variable.key() + "' "
+                    + "(types acceptés : " + VARIABLE_TYPES + ").");
+        }
+    }
+
+    /** Normalise les déclarations : type abaissé en casse, {@code string} par défaut,
+     *  {@code required} absent vaut {@code false}. */
+    private List<VariableDeclaration> toVariableDeclarations(List<VariableConfigDTO> dtos) {
+        List<VariableDeclaration> declarations = new ArrayList<>();
+        if (dtos != null) {
+            for (VariableConfigDTO dto : dtos) {
+                String type = dto.type() == null || dto.type().isBlank()
+                        ? "string"
+                        : dto.type().trim().toLowerCase();
+                declarations.add(new VariableDeclaration(
+                        dto.key(), type, Boolean.TRUE.equals(dto.required())));
+            }
+        }
+        return declarations;
     }
 }

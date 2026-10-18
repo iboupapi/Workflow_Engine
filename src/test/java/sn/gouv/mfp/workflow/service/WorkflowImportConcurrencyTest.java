@@ -87,7 +87,7 @@ class WorkflowImportConcurrencyTest {
                   name: "Circuit course"
                   version: 1
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"

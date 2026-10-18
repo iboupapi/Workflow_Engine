@@ -76,6 +76,15 @@ public class WorkflowDefinition {
     @Column(columnDefinition = "jsonb")
     private List<EntryPoint> entryPoints = new ArrayList<>();
 
+    /**
+     * Variables de dossier déclarées (MOT-10) : type et caractère obligatoire dès la création,
+     * persistés en JSONB (donnée de configuration, jamais figée en SQL).
+     */
+    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "variable_declarations", columnDefinition = "jsonb")
+    private List<VariableDeclaration> variableDeclarations = new ArrayList<>();
+
     @OneToMany(mappedBy = "definition")
     private List<WorkflowStep> steps = new ArrayList<>();
 }

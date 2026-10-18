@@ -227,7 +227,7 @@ class WorkflowDefinitionLoaderServiceTest {
                   key: "BROKEN_SRC"
                   name: "Circuit cassé"
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"
@@ -251,7 +251,7 @@ class WorkflowDefinitionLoaderServiceTest {
                   key: "BROKEN_TGT"
                   name: "Circuit cassé"
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"
@@ -275,7 +275,7 @@ class WorkflowDefinitionLoaderServiceTest {
                   key: "BROKEN_SPEL"
                   name: "Circuit cassé"
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"
@@ -359,7 +359,7 @@ class WorkflowDefinitionLoaderServiceTest {
                   maxActiveInstancesPerType: 2
                   maxActiveInstancesPerInitiator: 5
                 variables:
-                  - "natureActe"
+                  - key: "natureActe"
                 steps:
                   - key: "A"
                     type: "START"
@@ -399,7 +399,7 @@ class WorkflowDefinitionLoaderServiceTest {
                   name: "Circuit minimal"
                   version: 1
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"

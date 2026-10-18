@@ -37,9 +37,15 @@ entryPoints:
 # Clés de dossier autorisées dans les conditions SpEL (bloc obligatoire : toute autre clé
 # est refusée à l'import). Étendre cette liste avant d'utiliser une nouvelle clé en condition.
 variables:
-  - "circuit"
-  - "natureActe"
-  - "numeroOfficiel"
+  # MOT-10 : 'circuit' est exigée dès la création (conditionne l'aiguillage) ; les autres
+  # clés sont déclarées (autorisées en condition) mais facultatives à l'initiation.
+  - key: "circuit"
+    type: "string"
+    required: true
+  - key: "natureActe"
+    type: "string"
+  - key: "numeroOfficiel"
+    type: "string"
 
 # Définition des Étapes (points d'entrée : AGENT_BUREAU, CHEF_BUREAU, CHEF_DIVISION ;
 # niveaux des directions à confirmer avec le métier)

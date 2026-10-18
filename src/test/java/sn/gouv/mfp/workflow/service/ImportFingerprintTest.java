@@ -48,7 +48,7 @@ class ImportFingerprintTest {
                 new WorkflowConfigDTO.DefinitionConfigDTO(key, key, 99),
                 null,
                 null,
-                List.of("circuit"),
+                List.of(new WorkflowConfigDTO.VariableConfigDTO("circuit", null, null)),
                 steps,
                 List.of(transition));
     }

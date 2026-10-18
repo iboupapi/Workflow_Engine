@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import sn.gouv.mfp.workflow.domain.definition.StepType;
+import sn.gouv.mfp.workflow.domain.definition.VariableDeclaration;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowDefinition;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowStep;
 import sn.gouv.mfp.workflow.domain.definition.WorkflowTransition;
@@ -172,6 +173,9 @@ public class WorkflowExecutionService {
             Set<String> actorRoles) {
         WorkflowDefinition definition = latestDefinition(definitionKey);
         WorkflowStep startStep = resolveStartStep(definition, startStepKey);
+
+        // MOT-10 : variables déclarées, obligatoires et typées dès la création du dossier.
+        enforceCreationVariables(definition, initialVariables);
 
         // MOT-05 : plafond de dossiers actifs par rôle initiateur et par type d'acte,
         // contrôlé SOUS VERROU (voir enforceQuota).
@@ -601,6 +605,57 @@ public class WorkflowExecutionService {
         }
         Object value = variables.get(key);
         return value == null || (value instanceof String text && text.isBlank());
+    }
+
+    /**
+     * MOT-10 — contrôle des variables déclarées DÈS LA CRÉATION : toute variable
+     * {@code required} doit être présente et non vide ; le type d'une variable déclarée
+     * fournie est vérifié ({@code string}, {@code number}, {@code boolean}, {@code date}).
+     */
+    private void enforceCreationVariables(WorkflowDefinition definition, Map<String, Object> variables) {
+        List<VariableDeclaration> declared = definition.getVariableDeclarations();
+        if (declared == null || declared.isEmpty()) {
+            return;
+        }
+        List<String> missing = declared.stream()
+                .filter(VariableDeclaration::required)
+                .map(VariableDeclaration::key)
+                .filter(key -> isMissing(variables, key))
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new MissingRequiredDataException("Création impossible. Variable(s) "
+                    + "obligatoire(s) manquante(s) : [" + String.join(", ", missing) + "].");
+        }
+        for (VariableDeclaration declaration : declared) {
+            if (variables == null || !variables.containsKey(declaration.key())) {
+                continue;
+            }
+            Object value = variables.get(declaration.key());
+            if (value != null && !matchesVariableType(value, declaration.type())) {
+                throw new WorkflowValidationException("Variable déclarée '" + declaration.key()
+                        + "' : type attendu '" + declaration.type()
+                        + "', valeur reçue incompatible.");
+            }
+        }
+    }
+
+    private boolean matchesVariableType(Object value, String type) {
+        return switch (type == null ? "string" : type) {
+            case "string" -> value instanceof CharSequence;
+            case "number" -> value instanceof Number;
+            case "boolean" -> value instanceof Boolean;
+            case "date" -> value instanceof CharSequence text && isIsoDate(text.toString());
+            default -> true;
+        };
+    }
+
+    private boolean isIsoDate(String text) {
+        try {
+            java.time.LocalDate.parse(text.trim());
+            return true;
+        } catch (java.time.format.DateTimeParseException e) {
+            return false;
+        }
     }
 
     /**

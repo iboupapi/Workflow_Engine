@@ -116,9 +116,18 @@ public final class ImportFingerprint {
                     })
                     .toList();
             model.put("transitions", transitions);
+            // MOT-10 : la déclaration (clé, type, obligatoire) fait partie du contenu canonique —
+            // un changement de type ou de caractère obligatoire crée une nouvelle version.
             List<String> variables = config.variables() == null
                     ? List.of()
-                    : new ArrayList<>(config.variables()).stream().sorted().toList();
+                    : config.variables().stream()
+                            .map(v -> orEmpty(v.key())
+                                    + ":" + (v.type() == null || v.type().isBlank()
+                                            ? "string" : v.type().trim().toLowerCase())
+                                    + ":" + (Boolean.TRUE.equals(v.required())
+                                            ? "required" : "optional"))
+                            .sorted()
+                            .toList();
             model.put("variables", variables);
             String json = JSON.writeValueAsString(model);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

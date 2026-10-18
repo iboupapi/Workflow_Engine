@@ -12,8 +12,9 @@ public record WorkflowConfigDTO(
         DefinitionConfigDTO definition,
         SettingsConfigDTO settings,
         List<EntryPointConfigDTO> entryPoints,
-        /** Clés de dossier autorisées dans les conditions SpEL (bloc obligatoire, recette 1.5). */
-        List<String> variables,
+        /** Variables de dossier déclarées (bloc obligatoire, recette 1.5) : clés autorisées dans
+         *  les conditions SpEL, type contrôlé et caractère obligatoire dès la création (MOT-10). */
+        List<VariableConfigDTO> variables,
         List<StepConfigDTO> steps,
         List<TransitionConfigDTO> transitions) {
 
@@ -36,6 +37,14 @@ public record WorkflowConfigDTO(
             String role,
             Integer maxPerType,
             Integer maxPerInitiator) {
+    }
+
+    /**
+     * Déclaration d'une variable de dossier (MOT-10) : clé, type contrôlé
+     * ({@code string}, {@code number}, {@code boolean}, {@code date}) et caractère
+     * obligatoire dès la création. {@code required} absent vaut {@code false}.
+     */
+    public record VariableConfigDTO(String key, String type, Boolean required) {
     }
 
     public record EntryPointConfigDTO(

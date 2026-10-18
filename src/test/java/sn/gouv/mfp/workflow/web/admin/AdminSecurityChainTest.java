@@ -94,7 +94,7 @@ class AdminSecurityChainTest {
                   key: "CHAIN_OK"
                   name: "Circuit chaîne"
                 variables:
-                  - "circuit"
+                  - key: "circuit"
                 steps:
                   - key: "A"
                     type: "START"
