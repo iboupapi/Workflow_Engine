@@ -27,6 +27,15 @@ spring:
     user: ${FLYWAY_OWNER_USER:workflow_owner}
     password: ${FLYWAY_OWNER_PASSWORD:}
 
+# Aligne le socle de test sur le defaut de production : la documentation API est
+# desactivee sauf activation explicite (SWAGGER_ENABLED=true). Preuve : Phase0GuardsTest
+# (desactivee par defaut) et SwaggerEnabledWhenRequestedTest (activee sur demande).
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
 auth:
   admin:
     subjects: ${ADMIN_SUBJECTS:}

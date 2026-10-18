@@ -27,7 +27,8 @@ import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
  * (S_VISA -&gt; DGFP), y fait circuler un dossier fictif portant des variables JSONB
  * (nature de l'acte, numéro officiel, circuit), puis le relit pour prouver le round-trip JSONB.
  * <p>
- * Idempotent : ne recrée rien si la définition existe déjà. Désactivable avec le profil {@code nodemo}.
+ * Idempotent pour la définition. <strong>Actif uniquement sous le profil {@code demo}</strong> :
+ * le démarrage standard ne crée aucun dossier fictif.
  */
 @Component
 @Profile("demo")

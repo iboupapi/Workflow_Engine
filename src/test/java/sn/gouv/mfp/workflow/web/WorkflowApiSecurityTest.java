@@ -15,8 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Refus par défaut au niveau HTTP (contexte complet, vraie chaîne de sécurité) :
  * sans identifiants : 401 ; seule la documentation reste publique.
+ * <p>
+ * La documentation est désactivée par défaut (Phase 0) ; on l'active ici uniquement pour
+ * vérifier que, lorsqu'elle est servie, elle ne réclame aucun jeton (jamais 401/403).
  */
-@SpringBootTest
+@SpringBootTest(properties = "SWAGGER_ENABLED=true")
 @AutoConfigureMockMvc
 @Transactional
 class WorkflowApiSecurityTest {
