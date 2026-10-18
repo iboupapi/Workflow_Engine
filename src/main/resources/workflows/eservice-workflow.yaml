@@ -2,9 +2,14 @@
 # BROUILLON — CIRCUIT E-SERVICE (Demandes citoyennes). Hypothèses signalées
 # ci-dessous, à valider avec le métier (§14 du cahier de recette).
 # La cible RESPONSABLE_TRAITEMENT est supportée par le moteur : elle renvoie à
-# l'étape où le traitement a été fait, mémorisée par la transition marquée
-# « setsHandler: true » (ici AGENT_TRAITEMENT -TRANSMETTRE-> CHEF_DIVISION pour le
-# traitement délégué, et CHEF_DIVISION -VALIDER-> DLEC pour le traitement direct).
+# l'étape de traitement mémorisée par la transition marquée « setsHandler: true »
+# (exigence MOT-06 : marqueur porté par la TRANSITION de traitement, en délégation
+# comme en direct). Ici le Chef de Division est l'unité responsable : sa validation
+# vers la DLEC (CHEF_DIVISION -VALIDER-> DLEC) porte le marqueur, donc tout rejet
+# d'une autorité supérieure (DLEC, DGFP) lui revient pour arbitrage ou réimputation —
+# que le traitement ait été fait en direct, ou délégué à un agent (dans ce cas
+# AGENT_TRAITEMENT -TRANSMETTRE-> CHEF_DIVISION est marqué aussi, puis la validation
+# du chef, qui la suit, devient le traitement de référence).
 # ==============================================================================
 definition:
   key: "E_SERVICE_DEMANDE"

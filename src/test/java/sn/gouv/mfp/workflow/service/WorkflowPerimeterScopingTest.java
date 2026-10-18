@@ -10,6 +10,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 import sn.gouv.mfp.workflow.domain.definition.EntryPoint;
 import sn.gouv.mfp.workflow.domain.definition.StepType;
@@ -23,6 +25,8 @@ import sn.gouv.mfp.workflow.repository.WorkflowDefinitionRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowInstanceRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowStepRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
+import sn.gouv.mfp.workflow.service.WorkflowReadService.InstanceView;
+import sn.gouv.mfp.workflow.service.WorkflowReadService.SearchCriteria;
 import sn.gouv.mfp.workflow.service.WorkflowReadService.Viewer;
 
 /**
@@ -90,6 +94,32 @@ class WorkflowPerimeterScopingTest {
 
         assertThatThrownBy(() -> readService.visibleOrThrow(instance.getId(), viewerOtherDirection))
                 .isInstanceOf(WorkflowInstanceNotFoundException.class);
+    }
+
+    @Test
+    void inbox_shouldFilterOutInstancesOutsidePerimeter() {
+        String key = "SCOPE_INBOX_" + UUID.randomUUID().toString().substring(0, 8);
+        createCircuit(key);
+
+        // Deux dossiers ACTIVE à la même étape (même rôle responsable AGENT_SOLDE),
+        // mais de périmètres organisationnels différents.
+        WorkflowInstance mine = executionService.startWorkflow(
+                key, "initiateur-01", null, "ETAPE_INIT", "DGFP", "BUREAU_SOLDE");
+        executionService.startWorkflow(
+                key, "initiateur-02", null, "ETAPE_INIT", "DGTCP", "BUREAU_RECRUTEMENT");
+
+        Viewer viewer = new Viewer(
+                "agent-01", Set.of("AGENT_SOLDE"), false, false, "DGFP", "BUREAU_SOLDE");
+
+        Page<WorkflowInstance> inbox = readService.search(
+                viewer,
+                new SearchCriteria(InstanceView.INBOX, key, null, null, null),
+                PageRequest.of(0, 50));
+
+        // La bannette ne retient que le dossier du périmètre du demandeur.
+        assertThat(inbox.getContent())
+                .extracting(WorkflowInstance::getId)
+                .containsExactly(mine.getId());
     }
 
     @Test
