@@ -5,6 +5,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManagerResolver;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -36,6 +37,7 @@ public class SecurityConfig {
         BearerTokenAuthenticationEntryPoint entryPoint =
                 new BearerTokenAuthenticationEntryPoint();
         http.csrf(AbstractHttpConfigurer::disable)
+                .cors(Customizer.withDefaults())
                 .sessionManagement(
                         sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(entryPoint))
@@ -46,6 +48,12 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
                                 "/actuator/health")
+                        .permitAll()
+                        // Outils de développement (profil dev uniquement) : l'endpoint de
+                        // génération de jetons doit être atteignable SANS jeton, sinon il ne
+                        // sert à rien. Le contrôleur n'existe pas hors profil dev : en
+                        // production, ces chemins ne trouvent aucun handler (404).
+                        .requestMatchers("/api/dev/**")
                         .permitAll()
                         // Le dispatch d'erreur interne doit rester joignable, sinon toute
                         // erreur métier (400/404/409) serait masquée en 403.

@@ -10,4 +10,7 @@ public interface WorkflowTransitionRepository extends JpaRepository<WorkflowTran
     List<WorkflowTransition> findBySourceStepId(UUID sourceStepId);
 
     List<WorkflowTransition> findBySourceStepIdAndAction(UUID sourceStepId, String action);
+
+    /** Toutes les transitions d'une définition, quel que soit leur nœud d'origine. */
+    List<WorkflowTransition> findBySourceStepDefinitionId(UUID definitionId);
 }

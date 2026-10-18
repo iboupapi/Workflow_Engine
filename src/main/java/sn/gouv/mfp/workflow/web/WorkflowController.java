@@ -26,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 import sn.gouv.mfp.workflow.domain.execution.InstanceStatus;
 import sn.gouv.mfp.workflow.domain.execution.WorkflowInstance;
 import sn.gouv.mfp.workflow.service.WorkflowAuthorizationService;
+import sn.gouv.mfp.workflow.service.WorkflowDefinitionViewService;
+import sn.gouv.mfp.workflow.service.WorkflowDefinitionViewService.DefinitionView;
 import sn.gouv.mfp.workflow.service.WorkflowExecutionService;
 import sn.gouv.mfp.workflow.service.WorkflowReadService;
 import sn.gouv.mfp.workflow.service.WorkflowReadService.ActionOption;
@@ -48,17 +50,38 @@ public class WorkflowController {
     private final WorkflowExecutionService executionService;
     private final WorkflowReadService readService;
     private final WorkflowAuthorizationService authorizationService;
+    private final WorkflowDefinitionViewService definitionViewService;
     private final RequestActor requestActor;
 
     public WorkflowController(
             WorkflowExecutionService executionService,
             WorkflowReadService readService,
             WorkflowAuthorizationService authorizationService,
+            WorkflowDefinitionViewService definitionViewService,
             RequestActor requestActor) {
         this.executionService = executionService;
         this.readService = readService;
         this.authorizationService = authorizationService;
+        this.definitionViewService = definitionViewService;
         this.requestActor = requestActor;
+    }
+
+    @Operation(
+            summary = "Consulter la définition d'un circuit",
+            description = "Carte statique de la dernière version du circuit : étapes (nature, "
+                    + "rôles responsables, données obligatoires), transitions (action, cible, "
+                    + "condition, marqueur de traitement), points d'entrée et variables. "
+                    + "Alimente le visualiseur de la console ; aucune donnée de dossier.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Définition du circuit."),
+        @ApiResponse(responseCode = "401", description = "Non authentifié."),
+        @ApiResponse(responseCode = "404", description = "Clé de circuit inconnue.")
+    })
+    @GetMapping("/workflows/{definitionKey}")
+    public DefinitionView getDefinition(
+            @Parameter(description = "Clé fonctionnelle du circuit.", example = "E_SERVICE_DEMANDE")
+            @PathVariable String definitionKey) {
+        return definitionViewService.view(definitionKey);
     }
 
     @Operation(

@@ -1,0 +1,44 @@
+# ==============================================================================
+# Profil `dev` : socle de developpement local pour la console de test (Phase 2).
+#   - emetteur JWT local (HMAC) alimentant /api/dev/tokens (SEC-08) ;
+#   - CORS ouvert a l'origine de la console Vite.
+# Le secret n'est JAMAIS en dur : definir TEST_ISSUER_SECRET avant de demarrer.
+# Demarrage local conseille (applique aussi les migrations avec le compte proprietaire) :
+#   SPRING_PROFILES_ACTIVE=dev,migrate  TEST_ISSUER_SECRET=<jeton-test-32-octets-mini>  \
+#   SPRING_DATASOURCE_PASSWORD=<app>  FLYWAY_OWNER_PASSWORD=<owner>  ./mvnw spring-boot:run
+#
+# AUCUN import automatique de circuit : le pilote doit etre importe une fois, sans quoi
+# GET /api/workflows/E_SERVICE_DEMANDE et POST .../start repondent 404. L'import exige un
+# administrateur NOMME : definir ADMIN_SUBJECTS=<emetteur>:<sub> (ex. ADMIN_SUBJECTS=test:dev-dgfp
+# pour le jeton de developpement du role DGFP, dont le sub est `dev-dgfp`), puis :
+#   curl -X POST http://localhost:8080/api/admin/workflows/import \
+#     -H "Authorization: Bearer <jeton administrateur>" \
+#     -H "Content-Type: application/x-yaml" \
+#     --data-binary @src/main/resources/workflows/eservice-workflow.yaml
+#
+# Imputation (action IMPUTER) : la variable `assignee` est OBLIGATOIRE et doit porter
+# l'IDENTITE CERTIFIEE de l'agent (« nomEmetteur:sub », ex. test:dev-agent_traitement) ;
+# absente, l'action est refusee (400).
+# ==============================================================================
+auth:
+  jwt:
+    issuers:
+      test:
+        issuer: "https://test.mfp.local"
+        audience: "workflow-api"
+        hmac-secret: ${TEST_ISSUER_SECRET:}
+        roles-claim: "roles"
+        # Correspondance role moteur -> roles du jeton (celles que porte le jeton emis).
+        role-mapping:
+          CITOYEN: ["CITOYEN"]
+          CHEF_DIVISION: ["CHEF_DIVISION"]
+          AGENT_TRAITEMENT: ["AGENT_TRAITEMENT"]
+          DLEC: ["DLEC"]
+          DGFP: ["DGFP"]
+          SG: ["SG"]
+          AGENT_BUREAU: ["AGENT_BUREAU"]
+
+app:
+  cors:
+    # Origines autorisees : console Vite (5173) et, par securite, 8081.
+    allowed-origins: "http://localhost:5173,http://localhost:8081"
