@@ -121,7 +121,7 @@ class WorkflowExecutionTransitionRoleTest {
     }
 
     @Test
-    void handlerTarget_routesToProcessingStep() {
+    void handlerTarget_routesToRecordedHandlerStep() {
         UUID id = UUID.randomUUID();
         WorkflowDefinition definition = definition("CIRCUIT");
         WorkflowStep current = step(definition, "S1", StepType.TASK, List.of("R1"));
@@ -130,11 +130,14 @@ class WorkflowExecutionTransitionRoleTest {
         transition.setAction("REJETER");
         transition.setTargetStepKey("RESPONSABLE_TRAITEMENT");
 
-        when(instances.findByIdWithLock(id))
-                .thenReturn(Optional.of(activeInstance(definition, "S1")));
+        // L'étape de traitement a été mémorisée par une transition setsHandler franchie avant ce rejet.
+        WorkflowInstance instance = activeInstance(definition, "S1");
+        instance.setHandlerStepKey("SB");
+        instance.setHandlerActorId("agent-r1");
+
+        when(instances.findByIdWithLock(id)).thenReturn(Optional.of(instance));
         when(steps.findByDefinitionIdAndStepKey(any(), eq("S1"))).thenReturn(Optional.of(current));
         when(steps.findByDefinitionIdAndStepKey(any(), eq("SB"))).thenReturn(Optional.of(handler));
-        when(steps.findFirstByDefinitionIdAndProcessingStepTrue(any())).thenReturn(Optional.of(handler));
         when(transitions.findBySourceStepIdAndAction(any(), eq("REJETER")))
                 .thenReturn(List.of(transition));
         when(conditionEvaluator.evaluateStrict(isNull(), any())).thenReturn(true);

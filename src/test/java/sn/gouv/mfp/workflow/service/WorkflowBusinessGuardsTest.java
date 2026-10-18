@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -92,6 +93,60 @@ class WorkflowBusinessGuardsTest {
         executionService.startWorkflow(lastKey, "agent-free", null);
 
         assertThat(instances.findByStatus(InstanceStatus.ACTIVE)).hasSizeGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    void secondActiveInstanceForSameNatureActe_shouldThrowPerTypeQuota() {
+        givenPerTypeCappedCircuit("QUOTATYPE_" + unique(), 1);
+
+        executionService.startWorkflow(lastKey, "agent-t1", Map.of("natureActe", "ARRETE"), null);
+
+        assertThatThrownBy(() -> executionService.startWorkflow(
+                        lastKey, "agent-t1", Map.of("natureActe", "ARRETE"), null))
+                .isInstanceOf(WorkflowQuotaExceededException.class)
+                .hasMessageContaining("type : ARRETE");
+    }
+
+    @Test
+    void differentNatureActeForSameInitiator_shouldPass() {
+        givenPerTypeCappedCircuit("QUOTATYPE_OK_" + unique(), 1);
+
+        executionService.startWorkflow(lastKey, "agent-t2", Map.of("natureActe", "ARRETE"), null);
+        WorkflowInstance other = executionService.startWorkflow(
+                lastKey, "agent-t2", Map.of("natureActe", "DECRET"), null);
+
+        assertThat(other.getStatus()).isEqualTo(InstanceStatus.ACTIVE);
+    }
+
+    // --- MOT-05 : plafond scopé par rôle ET par type d'acte ---
+
+    @Test
+    void roleScopedQuota_shouldBlockCappedRole() {
+        givenRoleCappedCircuit("QUOTAROLE_" + unique(), "AGENT_BUREAU", 1);
+
+        executionService.startWorkflow(
+                lastKey, "agent-r1", Map.of("natureActe", "ARRETE"), null, null, null,
+                Set.of("AGENT_BUREAU"));
+
+        assertThatThrownBy(() -> executionService.startWorkflow(
+                        lastKey, "agent-r1", Map.of("natureActe", "ARRETE"), null, null, null,
+                        Set.of("AGENT_BUREAU")))
+                .isInstanceOf(WorkflowQuotaExceededException.class)
+                .hasMessageContaining("type : ARRETE");
+    }
+
+    @Test
+    void roleScopedQuota_shouldNotBlockOtherRoles() {
+        givenRoleCappedCircuit("QUOTAROLE_OK_" + unique(), "AGENT_BUREAU", 1);
+
+        executionService.startWorkflow(
+                lastKey, "chef-c1", Map.of("natureActe", "ARRETE"), null, null, null,
+                Set.of("CHEF_BUREAU"));
+        WorkflowInstance other = executionService.startWorkflow(
+                lastKey, "chef-c1", Map.of("natureActe", "ARRETE"), null, null, null,
+                Set.of("CHEF_BUREAU"));
+
+        assertThat(other.getStatus()).isEqualTo(InstanceStatus.ACTIVE);
     }
 
     // --- Module 6.2 : données obligatoires ---
@@ -223,6 +278,37 @@ class WorkflowBusinessGuardsTest {
         if (max > 0) {
             definition.setSettings(new HashMap<>(Map.of("maxActiveInstancesPerInitiator", max)));
         }
+        definition = definitions.save(definition);
+
+        WorkflowStep start = newStep(definition, "ACCUEIL", StepType.START);
+        newStep(definition, "FIN", StepType.END);
+        newTransition(start, "VALIDER", "FIN", null);
+    }
+
+    /** Circuit minimal A(START) -VALIDER-> B(END), avec plafond par type d'acte. */
+    private void givenPerTypeCappedCircuit(String key, int max) {
+        lastKey = key;
+        WorkflowDefinition definition = newDefinition(key);
+        if (max > 0) {
+            definition.setSettings(new HashMap<>(Map.of("maxActiveInstancesPerType", max)));
+        }
+        definition = definitions.save(definition);
+
+        WorkflowStep start = newStep(definition, "ACCUEIL", StepType.START);
+        newStep(definition, "FIN", StepType.END);
+        newTransition(start, "VALIDER", "FIN", null);
+    }
+
+    /**
+     * Circuit minimal A(START) -VALIDER-> B(END) avec plafond par type d'acte scopé sur un rôle
+     * initiateur (MOT-05) : seuls les initiateurs portant {@code role} sont plafonnés.
+     */
+    private void givenRoleCappedCircuit(String key, String role, int maxPerType) {
+        lastKey = key;
+        WorkflowDefinition definition = newDefinition(key);
+        definition.setSettings(new HashMap<>(Map.of(
+                "activeInstanceLimits",
+                List.of(Map.of("role", role, "maxPerType", maxPerType)))));
         definition = definitions.save(definition);
 
         WorkflowStep start = newStep(definition, "ACCUEIL", StepType.START);

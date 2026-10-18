@@ -20,14 +20,28 @@ Exemple complet : `src/main/resources/workflows/girafe-workflow.yaml`.
 | Champ                             | Type    | Effet moteur                                                     |
 |-----------------------------------|---------|------------------------------------------------------------------|
 | `maxActiveInstancesPerInitiator`   | integer | Plafond de dossiers ACTIVE par initiateur et par version (`> 0` pour activer, sinon 409 au-delà) |
+| `maxActiveInstancesPerType`        | integer | Plafond de dossiers ACTIVE par initiateur **et par type d'acte** (variable `natureActe`) : `> 0` autorise un seul dossier en cours par nature ; combinable avec le plafond par initiateur |
+| `activeInstanceLimits`             | liste   | **MOT-05** — plafond de dossiers actifs par **rôle initiateur** ET par type d'acte, appliqué sous verrou. Liste d'entrées `{ role, maxPerType, maxPerInitiator }` : la règle ne s'applique qu'aux initiateurs portant `role` (ex. seul `AGENT_BUREAU`, les chefs ne sont pas plafonnés). Cumulé au plus restrictif avec les deux plafonds ci-dessus |
 | `resumeStrategyDefault`           | string  | `FROM_REJECTING_STEP` (défaut si absent) : après rejet, la re-validation saute directement à l'étape émettrice ; `FROM_START` : reprise linéaire normale |
+
+Exemple de plafond scopé par rôle (GIRAFE — un agent de bureau ne peut pas avoir deux dossiers
+en cours de la même nature d'acte ; les chefs de bureau et de division restent libres) :
+
+```yaml
+settings:
+  activeInstanceLimits:
+    - role: "AGENT_BUREAU"
+      maxPerType: 1
+  resumeStrategyDefault: "FROM_START"
+```
 
 ## Bloc `entryPoints` (facultatif, liste vide = démarrage sur la première étape `START`)
 
 | Champ          | Type   | Règle                                                              |
 |----------------|--------|---------------------------------------------------------------------|
-| `role`         | string | Rôle métier autorisé à initier depuis ce point (informatif à ce stade) |
-| `startStepKey` | string | Étape de départ : `START` toujours autorisée ; `TASK` uniquement si déclarée ici, sinon 400 ; `END` toujours refusée |
+| `role`         | string | Rôle métier autorisé à initier depuis ce point : le demandeur doit le porter (sinon 403). Voir `condition` |
+| `startStepKey` | string | Étape de départ (alias accepté : `step`) : `START` toujours autorisée ; `TASK` uniquement si déclarée ici, sinon 400 ; `END` toujours refusée |
+| `condition`    | string | (facultatif) Condition SpEL d'éligibilité (même liste blanche que les transitions, ex. le cas retraite). Évaluée à `/start` pour le rôle du point d'entrée ; condition non satisfaite = 403 |
 
 ## Bloc `variables` (**obligatoire**, peut être vide)
 
@@ -44,7 +58,6 @@ est refusée à l'import (400). Une liste vide signifie « aucune condition auto
 | `type`                 | enum         | `START`, `TASK` ou `END`                                     |
 | `requiredDataOnValidate` | list[string] | Données obligatoires à toute action positive sur l'étape (absente, nulle ou blanche = 400 ; jamais contrôlé sur `REJETER`) |
 | `owners`               | list[string] | Rôles responsables de l'étape : boîte de réception **et** droit d'agir (`/start`, `/transition`). Absent = étape sans action possible (refus par défaut). Le rôle réservé `ADMIN` y est **interdit** (un administrateur n'est pas validateur) ; mappings métier à confirmer au §14 |
-| `processingStep`       | bool         | (facultatif) Étape de traitement de référence, cible de la reprise `RESPONSABLE_TRAITEMENT` après rejet. **Au plus une** étape marquée par circuit (sinon 400) ; **obligatoire** si une transition utilise la cible `RESPONSABLE_TRAITEMENT` (sinon 400) |
 
 ## Bloc `transitions`
 
@@ -52,8 +65,9 @@ est refusée à l'import (400). Une liste vide signifie « aucune condition auto
 |-------------|--------|-------------------------------------------------------------------------------------------------|
 | `source`    | string | Doit référencer une étape déclarée, sinon 400                                                  |
 | `action`    | string | Déclencheur libre (ex. `VALIDER`, `REJETER`, `TRANSMETTRE`) ; `REJETER` a un traitement dédié (mémorisation de l'étape émettrice, données non contrôlées) ; `IMPUTER` désigne la personne via la variable `assignee` (400 sans elle, traçée en `to_actor`) ; `REJET_DEFINITIF` clôt le dossier en `REJECTED_FINAL` (rejet administratif définitif, distinct de l'annulation usager `CANCELLED`) |
-| `target`    | string | Étape déclarée, ou cible virtuelle : `INITIATEUR` (étape d'initiation via l'historique), `ETAPE_PRECEDENTE` (dernière étape traversée), `RESPONSABLE_TRAITEMENT` (étape de traitement de référence du circuit, `processingStep: true`) |
+| `target`    | string | Étape déclarée, ou cible virtuelle : `INITIATEUR` (étape d'initiation via l'historique), `ETAPE_PRECEDENTE` (dernière étape traversée), `RESPONSABLE_TRAITEMENT` (étape où le traitement a été fait, mémorisée par la transition `setsHandler`, voir ci-dessous) |
 | `condition` | string | Expression SpEL **facultative** ; absente = transition inconditionnelle (repli évalué en dernier) |
+| `setsHandler` | bool | (facultatif) **Marqueur de traitement** : au franchissement de cette transition, le moteur mémorise l'acteur (`handler_actor_id`) et l'étape d'origine (`handler_step_key`) sur le dossier. Cible de la reprise `RESPONSABLE_TRAITEMENT` (traitement délégué **ou** direct). **Obligatoire** (au moins une transition marquée) si une transition utilise la cible `RESPONSABLE_TRAITEMENT` (sinon 400) ; plusieurs transitions marquées sont autorisées (délégation et traitement direct) |
 
 > Il n'existe pas de bloc `outputs:` : une donnée produite en cours de circuit
 > (ex. `numeroOfficiel`) est exigée via `requiredDataOnValidate` et conservée dans
@@ -73,9 +87,13 @@ est refusée à l'import (400). Une liste vide signifie « aucune condition auto
 Balises d'objets (`!!java...`, `!perso`, `!<uri>`, y compris sur les clés), ancres et
 alias (`&`, `*`), fichiers de plus d'un million de caractères, clés dupliquées.
 
+**Champs inconnus refusés** : tout champ non reconnu (faute de frappe comprise) est
+rejeté à l'import (400) avec son nom et son chemin — une erreur de saisie ne doit pas
+désactiver une règle en silence.
+
 ## Versionnage et idempotence
 
 - Chaque contenu nouveau crée la version suivante ; les dossiers en cours gardent leur version.
 - L'empreinte SHA-256 porte sur le contenu canonique (conditions normalisées, listes triées, commentaires et indentation ignorés, `version` exclu) : un réimport à l'identique renvoie HTTP 200 sans nouvelle version ; un changement réel crée N+1.
 - Chaque import écrit une ligne d'audit (`workflow_import_audit`) : clé, version, auteur authentifié, horodatage UTC, empreinte, nom de fichier, contenu conservé, indicateur de création.
-- L'import exige un **administrateur nommé** (JWT dont le sujet est déclaré dans `auth.admin.subjects`), sinon 403. Voir `docs/authentification.md`.
+- L'import exige un **administrateur nommé** (identité préfixée par l'émetteur, `nomEmetteur:sub`, déclarée dans `auth.admin.subjects`), sinon 403. Voir `docs/authentification.md`.

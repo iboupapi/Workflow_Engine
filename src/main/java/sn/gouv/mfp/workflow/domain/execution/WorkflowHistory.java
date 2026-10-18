@@ -43,15 +43,15 @@ public class WorkflowHistory {
     @Column(name = "to_step", nullable = false)
     private String toStep;
 
-    /** Identifiant de l'agent ayant exécuté l'action. */
-    @Column(name = "actor_id", nullable = false)
+    /** Identité de l'agent ayant exécuté l'action (préfixée par l'émetteur, « nomEmetteur:sub », SEC-03). */
+    @Column(name = "actor_id", nullable = false, length = 512)
     private String actorId;
 
     /**
      * Personne désignée par l'action (imputation et réimputations, recette 5.3/5.4),
      * null pour les autres actions.
      */
-    @Column(name = "to_actor_id")
+    @Column(name = "to_actor_id", length = 512)
     private String toActorId;
 
     /** Date et heure exactes de l'action. Colonne event_timestamp ("timestamp" étant réservé en SQL). */

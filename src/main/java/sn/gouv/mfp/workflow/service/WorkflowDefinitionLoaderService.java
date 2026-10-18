@@ -1,17 +1,21 @@
 package sn.gouv.mfp.workflow.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -35,6 +39,7 @@ import sn.gouv.mfp.workflow.repository.WorkflowStepRepository;
 import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
 import sn.gouv.mfp.workflow.service.dto.DefinitionImport;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO;
+import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.ActiveInstanceLimitConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.EntryPointConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.SettingsConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.StepConfigDTO;
@@ -165,7 +170,8 @@ public class WorkflowDefinitionLoaderService {
         definition.setVersion(version);
         definition.setContentHash(fingerprint);
         definition.setSettings(toSettingsMap(config.settings()));
-        definition.setEntryPoints(toEntryPoints(config.entryPoints()));
+        Set<String> declaredVars = config.variables() != null ? new HashSet<>(config.variables()) : Set.of();
+        definition.setEntryPoints(toEntryPoints(config.entryPoints(), declaredVars));
         definition = definitions.save(definition);
 
         Map<String, WorkflowStep> savedSteps = new HashMap<>();
@@ -179,7 +185,6 @@ public class WorkflowDefinitionLoaderService {
                     ? new ArrayList<>(stepDto.requiredDataOnValidate())
                     : null);
             step.setOwners(stepDto.owners() != null ? new ArrayList<>(stepDto.owners()) : null);
-            step.setProcessingStep(Boolean.TRUE.equals(stepDto.processingStep()));
             savedSteps.put(stepDto.key(), steps.save(step));
         }
 
@@ -191,6 +196,7 @@ public class WorkflowDefinitionLoaderService {
             transition.setAction(transDto.action());
             transition.setTargetStepKey(transDto.target());
             transition.setConditionExpression(canonicalConditions.get(transDto));
+            transition.setSetsHandler(Boolean.TRUE.equals(transDto.setsHandler()));
             transitions.save(transition);
             transitionCount++;
         }
@@ -252,9 +258,22 @@ public class WorkflowDefinitionLoaderService {
                         "YAML invalide : bloc 'definition.key' manquant.");
             }
             return config;
+        } catch (UnrecognizedPropertyException e) {
+            throw new WorkflowValidationException("Champ YAML inconnu : '" + e.getPropertyName()
+                    + "'" + unknownFieldPath(e) + ". Les champs non reconnus sont refusés : "
+                    + "corrigez l'orthographe ou retirez le champ.");
         } catch (JsonProcessingException e) {
             throw new WorkflowValidationException("YAML illisible : " + e.getOriginalMessage());
         }
+    }
+
+    /** Chemin ("steps[].ownerz") du champ inconnu, pour rendre l'erreur localisable. */
+    private static String unknownFieldPath(UnrecognizedPropertyException e) {
+        String path = e.getPath().stream()
+                .map(JsonMappingException.Reference::getFieldName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining("."));
+        return path.isBlank() ? "" : " (chemin : " + path + ")";
     }
 
     /**
@@ -275,7 +294,6 @@ public class WorkflowDefinitionLoaderService {
         Set<String> stepKeys = new HashSet<>();
         boolean hasStart = false;
         boolean hasEnd = false;
-        String processingStepKey = null;
         for (StepConfigDTO step : config.steps()) {
             if (step.key() == null || step.key().isBlank()) {
                 throw new WorkflowValidationException("YAML invalide : étape sans clé.");
@@ -292,16 +310,6 @@ public class WorkflowDefinitionLoaderService {
                 throw new WorkflowValidationException("YAML invalide : le rôle réservé '"
                         + WorkflowAuthorizationService.ADMIN_ROLE + "' ne peut pas être responsable "
                         + "de l'étape '" + step.key() + "' (un administrateur n'est pas validateur).");
-            }
-            // Cible RESPONSABLE_TRAITEMENT : au plus une étape de traitement de référence
-            // par circuit, sinon la reprise après rejet serait ambiguë.
-            if (Boolean.TRUE.equals(step.processingStep())) {
-                if (processingStepKey != null) {
-                    throw new WorkflowValidationException("YAML incohérent : plusieurs étapes de "
-                            + "traitement (processingStep: true) déclarées ('" + processingStepKey
-                            + "' et '" + step.key() + "') ; une seule est autorisée par circuit.");
-                }
-                processingStepKey = step.key();
             }
             try {
                 StepType type = StepType.valueOf(step.type());
@@ -337,6 +345,7 @@ public class WorkflowDefinitionLoaderService {
                 WorkflowExecutionService.PREVIOUS_STEP_TARGET,
                 WorkflowExecutionService.HANDLER_TARGET);
         boolean usesHandlerTarget = false;
+        boolean hasSetsHandlerTransition = false;
         Map<TransitionConfigDTO, String> canonicalConditions = new HashMap<>();
         for (TransitionConfigDTO transition : config.transitions()) {
             if (!stepKeys.contains(transition.source())) {
@@ -352,17 +361,27 @@ public class WorkflowDefinitionLoaderService {
             if (WorkflowExecutionService.HANDLER_TARGET.equals(transition.target())) {
                 usesHandlerTarget = true;
             }
+            if (Boolean.TRUE.equals(transition.setsHandler())) {
+                hasSetsHandlerTransition = true;
+            }
             if (transition.condition() != null && !transition.condition().isBlank()) {
                 canonicalConditions.put(
                         transition,
                         SpelSecurityValidator.validate(transition.condition(), declaredVariables));
             }
         }
-        if (usesHandlerTarget && processingStepKey == null) {
+        if (config.entryPoints() != null) {
+            for (EntryPointConfigDTO ep : config.entryPoints()) {
+                if (ep.condition() != null && !ep.condition().isBlank()) {
+                    SpelSecurityValidator.validate(ep.condition(), declaredVariables);
+                }
+            }
+        }
+        if (usesHandlerTarget && !hasSetsHandlerTransition) {
             throw new WorkflowValidationException("YAML incohérent : la cible "
-                    + WorkflowExecutionService.HANDLER_TARGET + " est utilisée mais aucune étape "
-                    + "n'est marquée 'processingStep: true' ; annotez l'étape de traitement de "
-                    + "référence (une seule par circuit).");
+                    + WorkflowExecutionService.HANDLER_TARGET + " est utilisée mais aucune transition "
+                    + "n'est marquée 'setsHandler: true' ; annotez la transition de traitement de "
+                    + "référence (celle qui franchit l'étape de traitement).");
         }
         return canonicalConditions;
     }
@@ -379,15 +398,44 @@ public class WorkflowDefinitionLoaderService {
         if (settings != null && settings.maxActiveInstancesPerInitiator() != null) {
             map.put("maxActiveInstancesPerInitiator", settings.maxActiveInstancesPerInitiator());
         }
-        
+
+        // Module 6.1 : plafond « un dossier en cours du même type d'acte », appliqué par
+        // initiateur et nature d'acte (voir WorkflowExecutionService.enforceQuota).
+        if (settings != null && settings.maxActiveInstancesPerType() != null) {
+            map.put("maxActiveInstancesPerType", settings.maxActiveInstancesPerType());
+        }
+
+        // MOT-05 : plafond scopé par rôle initiateur ET par type d'acte (liste de règles).
+        if (settings != null && settings.activeInstanceLimits() != null
+                && !settings.activeInstanceLimits().isEmpty()) {
+            List<Map<String, Object>> limits = new ArrayList<>();
+            for (ActiveInstanceLimitConfigDTO limit
+                    : settings.activeInstanceLimits()) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("role", limit.role());
+                if (limit.maxPerType() != null) {
+                    entry.put("maxPerType", limit.maxPerType());
+                }
+                if (limit.maxPerInitiator() != null) {
+                    entry.put("maxPerInitiator", limit.maxPerInitiator());
+                }
+                limits.add(entry);
+            }
+            map.put("activeInstanceLimits", limits);
+        }
+
         return map;
     }
 
-    private List<EntryPoint> toEntryPoints(List<EntryPointConfigDTO> dtos) {
+    private List<EntryPoint> toEntryPoints(List<EntryPointConfigDTO> dtos, Set<String> declaredVariables) {
         List<EntryPoint> points = new ArrayList<>();
         if (dtos != null) {
             for (EntryPointConfigDTO dto : dtos) {
-                points.add(new EntryPoint(dto.role(), dto.startStepKey()));
+                String canonicalCond = null;
+                if (dto.condition() != null && !dto.condition().isBlank()) {
+                    canonicalCond = SpelSecurityValidator.validate(dto.condition(), declaredVariables);
+                }
+                points.add(new EntryPoint(dto.role(), dto.startStepKey(), canonicalCond));
             }
         }
         return points;

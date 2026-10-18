@@ -55,4 +55,16 @@ public interface WorkflowInstanceRepository extends JpaRepository<WorkflowInstan
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM WorkflowInstance i WHERE i.id = :id")
     Optional<WorkflowInstance> findByIdWithLock(@Param("id") UUID id);
+
+    /**
+     * Pose un verrou consultatif transactionnel PostgreSQL (MOT-05) identifié par {@code key}.
+     * <p>
+     * Sert à sérialiser le contrôle du plafond de dossiers actifs par rôle initiateur et par
+     * type d'acte lors d'une initiation : deux initiations concurrentes du même initiateur sur
+     * le même circuit patientent l'une sur l'autre, la seconde comptant alors le dossier déjà
+     * créé par la première. Le verrou est libéré automatiquement à la fin de la transaction ;
+     * à appeler impérativement dans une transaction.
+     */
+    @Query(value = "SELECT pg_advisory_xact_lock(:key)", nativeQuery = true)
+    void acquireQuotaLock(@Param("key") long key);
 }

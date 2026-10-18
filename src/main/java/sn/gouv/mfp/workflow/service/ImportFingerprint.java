@@ -46,7 +46,8 @@ public final class ImportFingerprint {
             List<String> entryPoints = config.entryPoints() == null
                     ? List.of()
                     : config.entryPoints().stream()
-                            .map(e -> orEmpty(e.role()) + "->" + orEmpty(e.startStepKey()))
+                            .map(e -> orEmpty(e.role()) + "->" + orEmpty(e.startStepKey())
+                                    + (e.condition() != null ? "[" + e.condition().trim() + "]" : ""))
                             .sorted()
                             .toList();
             model.put("entryPoints", entryPoints);
@@ -56,9 +57,23 @@ public final class ImportFingerprint {
                     settings.put("maxActiveInstancesPerInitiator",
                             config.settings().maxActiveInstancesPerInitiator());
                 }
+                if (config.settings().maxActiveInstancesPerType() != null) {
+                    settings.put("maxActiveInstancesPerType",
+                            config.settings().maxActiveInstancesPerType());
+                }
                 if (config.settings().resumeStrategyDefault() != null) {
                     settings.put("resumeStrategyDefault",
                             config.settings().resumeStrategyDefault());
+                }
+                if (config.settings().activeInstanceLimits() != null) {
+                    List<String> limits = config.settings().activeInstanceLimits().stream()
+                            .map(limit -> orEmpty(limit.role())
+                                    + ":" + (limit.maxPerType() == null ? "-" : limit.maxPerType())
+                                    + ":" + (limit.maxPerInitiator() == null
+                                            ? "-" : limit.maxPerInitiator()))
+                            .sorted()
+                            .toList();
+                    settings.put("activeInstanceLimits", limits);
                 }
             }
             model.put("settings", settings);
@@ -79,7 +94,6 @@ public final class ImportFingerprint {
                                 ? List.of()
                                 : new ArrayList<>(step.owners()).stream().sorted().toList();
                         entry.put("owners", owners);
-                        entry.put("processingStep", Boolean.TRUE.equals(step.processingStep()));
                         return entry;
                     })
                     .toList();
@@ -97,6 +111,7 @@ public final class ImportFingerprint {
                         entry.put("action", orEmpty(transition.action()));
                         entry.put("target", orEmpty(transition.target()));
                         entry.put("condition", canonicalConditions.get(transition));
+                        entry.put("setsHandler", Boolean.TRUE.equals(transition.setsHandler()));
                         return entry;
                     })
                     .toList();

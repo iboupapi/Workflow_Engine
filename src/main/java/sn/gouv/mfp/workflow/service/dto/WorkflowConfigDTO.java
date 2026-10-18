@@ -1,13 +1,13 @@
 package sn.gouv.mfp.workflow.service.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 /**
  * Étape 5 — miroir Java de la configuration YAML d'un circuit.
- * Les champs inconnus sont ignorés pour permettre l'évolution du format sans casser l'import.
+ * Les champs inconnus sont REFUSÉS à l'import (une faute de frappe ne doit pas
+ * désactiver une règle en silence) ; le champ fautif est nommé dans l'erreur 400.
+ * Voir {@code YamlConfig} (FAIL_ON_UNKNOWN_PROPERTIES).
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record WorkflowConfigDTO(
         DefinitionConfigDTO definition,
         SettingsConfigDTO settings,
@@ -17,32 +17,57 @@ public record WorkflowConfigDTO(
         List<StepConfigDTO> steps,
         List<TransitionConfigDTO> transitions) {
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record DefinitionConfigDTO(String key, String name, Integer version) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record SettingsConfigDTO(
-            Integer maxActiveInstancesPerInitiator, String resumeStrategyDefault) {
+            Integer maxActiveInstancesPerInitiator,
+            Integer maxActiveInstancesPerType,
+            List<ActiveInstanceLimitConfigDTO> activeInstanceLimits,
+            String resumeStrategyDefault) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record EntryPointConfigDTO(String role, String startStepKey) {
+    /**
+     * Plafond de dossiers actifs scopé par RÔLE initiateur et par type d'acte (MOT-05).
+     * Il ne s'applique qu'aux initiateurs portant {@code role} ; les autres rôles ne sont
+     * pas plafonnés par cette règle (ex. seul l'agent de bureau est plafonné, pas les chefs).
+     */
+    public record ActiveInstanceLimitConfigDTO(
+            String role,
+            Integer maxPerType,
+            Integer maxPerInitiator) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EntryPointConfigDTO(
+            String role,
+            @com.fasterxml.jackson.annotation.JsonAlias({"step"})
+            String startStepKey,
+            String condition) {
+        public EntryPointConfigDTO(String role, String startStepKey) {
+            this(role, startStepKey, null);
+        }
+    }
+
     public record StepConfigDTO(
             String key,
             String name,
             String type,
             List<String> requiredDataOnValidate,
-            List<String> owners,
-            /** Étape de traitement de référence (cible RESPONSABLE_TRAITEMENT) : au plus une par circuit. */
-            Boolean processingStep) {
+            List<String> owners) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record TransitionConfigDTO(
-            String source, String action, String target, String condition) {
+            @com.fasterxml.jackson.annotation.JsonAlias({"from"})
+            String source,
+            String action,
+            @com.fasterxml.jackson.annotation.JsonAlias({"to"})
+            String target,
+            String condition,
+            /** Marqueur de traitement (setsHandler: true) : son franchissement mémorise l'acteur
+             *  et l'étape d'origine, cible de RESPONSABLE_TRAITEMENT. */
+            Boolean setsHandler) {
+        public TransitionConfigDTO(String source, String action, String target, String condition) {
+            this(source, action, target, condition, null);
+        }
     }
 }

@@ -7,7 +7,7 @@
     l'API sans attendre l'annuaire réel :
       - agent     : rôle AGENT_BUREAU (démarre le circuit sur l'étape AGENT_BUREAU) ;
       - citoyen   : rôle CITOYEN (E-Service) ;
-      - admin     : sujet nommé administrateur (à déclarer dans auth.admin.subjects).
+      - admin     : administrateur nommé (identité préfixée « nomEmetteur:sub » à déclarer dans auth.admin.subjects).
     RÈGLE DE SÉCURITÉ : aucun secret n'est écrit dans un fichier. Le secret est lu dans la
     variable d'environnement TEST_ISSUER_SECRET (jamais fourni en dur, jamais journalisé).
 
@@ -18,7 +18,12 @@
     Valeur de 'aud' (doit correspondre à auth.jwt.issuers.<nom>.audience).
 
 .PARAMETER AdminSubject
-    Sujet nommé de l'administrateur (à déclarer dans auth.admin.subjects).
+    Sujet (sub) de l'administrateur ; l'identité à déclarer dans auth.admin.subjects est
+    « nomEmetteur:sub » (voir -IssuerName).
+
+.PARAMETER IssuerName
+    Clé de configuration de l'émetteur (nom sous auth.jwt.issuers.<nom>) ; sert à composer
+    l'identité préfixée « nomEmetteur:sub » (SEC-03) à déclarer comme administrateur.
 
 .PARAMETER LifetimeSeconds
     Durée de validité des jetons (défaut 3600 s).
@@ -32,6 +37,7 @@ param(
     [string]$Issuer = "https://test.mfp.local",
     [string]$Audience = "workflow-api",
     [string]$AdminSubject = "admin-01",
+    [string]$IssuerName = "test",
     [int]$LifetimeSeconds = 3600
 )
 
@@ -78,7 +84,7 @@ $citizenToken = New-Hs256Jwt -Iss $Issuer -Aud $Audience -Sub "citoyen-01" -Role
 $adminToken = New-Hs256Jwt -Iss $Issuer -Aud $Audience -Sub $AdminSubject -Roles @("ADMIN")
 
 Write-Output "# Jetons de test émis par '$Issuer' (audience '$Audience'), valides $LifetimeSeconds s."
-Write-Output "# Prérequis : auth.jwt.issuers.<nom>.hmac-secret = TEST_ISSUER_SECRET, et auth.admin.subjects contient '$AdminSubject'."
+Write-Output "# Prérequis : auth.jwt.issuers.<nom>.hmac-secret = TEST_ISSUER_SECRET, et auth.admin.subjects contient '$IssuerName`:$AdminSubject' (identité préfixée par l'émetteur, SEC-03)."
 Write-Output ""
 Write-Output "AGENT_JWT=$agentToken"
 Write-Output "CITIZEN_JWT=$citizenToken"

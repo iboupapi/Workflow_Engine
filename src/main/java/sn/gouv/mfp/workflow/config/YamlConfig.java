@@ -13,6 +13,10 @@ import org.yaml.snakeyaml.LoaderOptions;
  * Durcissement SnakeYAML (cahier de recette 7.4) : constructeur sûr par défaut en 2.x
  * (les balises {@code !!java...} sont rejetées), taille plafonnée à ~1 Mo, alias limités
  * (bombes récursives rejetées) et clés dupliquées refusées.
+ * <p>
+ * Les champs inconnus sont REFUSÉS ({@code FAIL_ON_UNKNOWN_PROPERTIES=true}) : une simple
+ * faute de frappe ne doit pas désactiver une règle en silence (voir
+ * {@code WorkflowDefinitionLoaderService} qui traduit l'erreur en 400 nommant le champ).
  */
 @Configuration
 public class YamlConfig {
@@ -28,6 +32,6 @@ public class YamlConfig {
         loaderOptions.setAllowDuplicateKeys(false);
         YAMLFactory factory = YAMLFactory.builder().loaderOptions(loaderOptions).build();
         return new ObjectMapper(factory)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
     }
 }

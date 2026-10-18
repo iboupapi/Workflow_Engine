@@ -38,7 +38,7 @@ public class WorkflowImportAudit {
     private Integer version;
 
     /** Identité authentifiée de l'auteur (contexte de sécurité, sinon "anonymous"). */
-    @Column(name = "actor_id", nullable = false)
+    @Column(name = "actor_id", nullable = false, length = 512)
     private String actorId;
 
     /** Horodatage UTC de l'import. */

@@ -85,12 +85,17 @@ public class WorkflowController {
         Map<String, Object> variables = request != null ? request.variables() : null;
         String initiatorId = request != null ? request.initiatorId() : null;
         String startStepKey = request != null ? request.startStepKey() : null;
-        authorizationService.authorizeStart(definitionKey, startStepKey, Viewer.from(authentication));
+        Viewer viewer = Viewer.from(authentication);
+        authorizationService.authorizeStart(
+                definitionKey, startStepKey, viewer, variables != null ? variables : Map.of());
         WorkflowInstance instance = executionService.startWorkflow(
                 definitionKey,
                 requestActor.resolve(authentication, initiatorId),
                 variables,
-                startStepKey);
+                startStepKey,
+                viewer.direction(),
+                viewer.bureau(),
+                viewer.roles());
         return WorkflowInstanceResponse.from(instance);
     }
 
@@ -114,13 +119,16 @@ public class WorkflowController {
             @Parameter(description = "Identifiant du dossier.") @PathVariable UUID instanceId,
             @RequestBody TransitionRequest request,
             Authentication authentication) {
+        Viewer viewer = Viewer.from(authentication);
         WorkflowInstance instance = executionService.executeTransition(
                 instanceId,
                 request.action(),
                 requestActor.resolve(authentication, request.actorId()),
                 request.comment(),
                 request.variables(),
-                Viewer.from(authentication).roles());
+                viewer.roles(),
+                viewer.direction(),
+                viewer.bureau());
         return WorkflowInstanceResponse.from(instance);
     }
 

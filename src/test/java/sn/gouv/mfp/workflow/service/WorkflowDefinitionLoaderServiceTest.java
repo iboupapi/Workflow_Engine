@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,9 +92,15 @@ class WorkflowDefinitionLoaderServiceTest {
                         "DPR|#variables['circuit'] == 'PLUS_LONG'",
                         "DS|#variables['circuit'] == 'LONG'");
 
+        // Bloc settings remonté au niveau racine (il était indenté sous definition : ignoré
+        // en silence par le parseur YAML). MOT-05 : plafond par rôle ET par type d'acte,
+        // scopé sur le seul rôle AGENT_BUREAU (les chefs ne sont pas plafonnés).
         assertThat(definition.getSettings())
+                .doesNotContainKey("maxActiveInstancesPerType")
                 .doesNotContainKey("maxActiveInstancesPerInitiator")
                 .containsEntry("resumeStrategyDefault", "FROM_START");
+        assertThat(definition.getSettings().get("activeInstanceLimits"))
+                .isEqualTo(List.of(Map.of("role", "AGENT_BUREAU", "maxPerType", 1)));
         assertThat(definition.getEntryPoints())
                 .hasSize(3)
                 .extracting(e -> e.role() + "->" + e.startStepKey())
@@ -313,6 +321,63 @@ class WorkflowDefinitionLoaderServiceTest {
         assertThatThrownBy(() -> loaderService.loadAndSaveYamlDefinition(yaml))
                 .isInstanceOf(WorkflowValidationException.class)
                 .hasMessageContaining("ADMIN");
+    }
+
+    @Test
+    void importWithUnknownField_shouldBeRefusedNamingIt() {
+        String yaml = """
+                definition:
+                  key: "TYPO_CIRCUIT"
+                  name: "Circuit avec faute de frappe"
+                variables: []
+                steps:
+                  - key: "A"
+                    type: "START"
+                    ownerz: ["AGENT_BUREAU"]
+                  - key: "B"
+                    type: "END"
+                transitions:
+                  - source: "A"
+                    action: "VALIDER"
+                    target: "B"
+                """;
+
+        assertThatThrownBy(() -> loaderService.loadAndSaveYamlDefinition(yaml))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("Champ YAML inconnu")
+                .hasMessageContaining("ownerz");
+    }
+
+    @Test
+    void importWithPerTypeQuota_shouldPersistSettings() throws Exception {
+        String key = "QUOTA_T_" + UUID.randomUUID().toString().substring(0, 8);
+        String yaml = """
+                definition:
+                  key: "%s"
+                  name: "Circuit quota par type"
+                settings:
+                  maxActiveInstancesPerType: 2
+                  maxActiveInstancesPerInitiator: 5
+                variables:
+                  - "natureActe"
+                steps:
+                  - key: "A"
+                    type: "START"
+                  - key: "B"
+                    type: "END"
+                transitions:
+                  - source: "A"
+                    action: "VALIDER"
+                    target: "B"
+                """.formatted(key);
+
+        DefinitionImport result = loaderService.loadAndSaveYamlDefinition(yaml);
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.definition().getSettings())
+                .containsEntry("maxActiveInstancesPerType", 2)
+                .containsEntry("maxActiveInstancesPerInitiator", 5)
+                .containsEntry("resumeStrategyDefault", "FROM_START");
     }
 
     private String girafeYaml() throws Exception {

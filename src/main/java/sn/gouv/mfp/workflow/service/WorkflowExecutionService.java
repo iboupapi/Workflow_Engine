@@ -1,5 +1,6 @@
 package sn.gouv.mfp.workflow.service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +22,7 @@ import sn.gouv.mfp.workflow.exception.ConditionEvaluationException;
 import sn.gouv.mfp.workflow.exception.InvalidEntryPointException;
 import sn.gouv.mfp.workflow.exception.MissingRequiredDataException;
 import sn.gouv.mfp.workflow.exception.WorkflowConflictException;
+import sn.gouv.mfp.workflow.exception.WorkflowForbiddenException;
 import sn.gouv.mfp.workflow.exception.WorkflowInstanceNotFoundException;
 import sn.gouv.mfp.workflow.exception.WorkflowNotFoundException;
 import sn.gouv.mfp.workflow.exception.WorkflowQuotaExceededException;
@@ -54,10 +56,11 @@ public class WorkflowExecutionService {
     public static final String PREVIOUS_STEP_TARGET = "ETAPE_PRECEDENTE";
 
     /**
-     * Cible virtuelle (recette 6.5) : renvoie à l'étape de traitement de référence du
-     * circuit — l'unique étape marquée {@code processingStep: true} dans le YAML.
-     * Le marqueur est imposé à l'import (au plus une étape, obligatoire si cette cible
-     * est utilisée) ; le moteur refuse la reprise si aucune étape n'est annotée.
+     * Cible virtuelle (recette 6.5, Phase 1) : renvoie à l'étape où le traitement de
+     * référence a été effectivement réalisé (en délégation ou en direct). Le moteur
+     * mémorise cet emplacement via le marqueur {@code setsHandler: true} porté par la
+     * transition de traitement, qui est obligatoire à l'import dès que cette cible est
+     * utilisée ; la reprise est refusée si aucune transition marquée n'a été franchie.
      */
     public static final String HANDLER_TARGET = "RESPONSABLE_TRAITEMENT";
 
@@ -131,21 +134,59 @@ public class WorkflowExecutionService {
             String initiatorId,
             Map<String, Object> initialVariables,
             String startStepKey) {
+        return startWorkflow(definitionKey, initiatorId, initialVariables, startStepKey, null, null);
+    }
+
+    /**
+     * Initie un dossier en imposant l'étape de départ et en associant le périmètre organisationnel (direction, bureau).
+     * Chemin interne/de confiance : aucune règle de plafond par rôle n'est appliquée.
+     */
+    @Transactional
+    public WorkflowInstance startWorkflow(
+            String definitionKey,
+            String initiatorId,
+            Map<String, Object> initialVariables,
+            String startStepKey,
+            String scopeDirection,
+            String scopeBureau) {
+        return startWorkflow(
+                definitionKey, initiatorId, initialVariables, startStepKey, scopeDirection, scopeBureau, null);
+    }
+
+    /**
+     * Initie un dossier en contrôlant le plafond de dossiers actifs <strong>par rôle
+     * initiateur ET par type d'acte</strong> (MOT-05), sous verrou consultatif.
+     *
+     * @param actorRoles rôles moteur de l'initiateur ; seules les règles de plafond visant
+     *                   l'un de ces rôles s'appliquent. {@code null} = aucune règle par rôle
+     *                   (seuls les plafonds historiques non scopés s'appliquent).
+     */
+    @Transactional
+    public WorkflowInstance startWorkflow(
+            String definitionKey,
+            String initiatorId,
+            Map<String, Object> initialVariables,
+            String startStepKey,
+            String scopeDirection,
+            String scopeBureau,
+            Set<String> actorRoles) {
         WorkflowDefinition definition = latestDefinition(definitionKey);
         WorkflowStep startStep = resolveStartStep(definition, startStepKey);
 
-        // Module 6.1 : plafond de dossiers actifs par initiateur (désactivé si non configuré).
-        // Si un natureActe est fourni, le quota sera appliqué par type d'acte.
+        // MOT-05 : plafond de dossiers actifs par rôle initiateur et par type d'acte,
+        // contrôlé SOUS VERROU (voir enforceQuota).
         String natureActe = null;
         if (initialVariables != null && initialVariables.containsKey("natureActe")) {
             natureActe = (String) initialVariables.get("natureActe");
         }
-        enforceQuota(definition, initiatorId, natureActe);
+        enforceQuota(definition, initiatorId, natureActe, actorRoles);
 
         WorkflowInstance instance = new WorkflowInstance();
         instance.setDefinition(definition);
         instance.setCurrentStepKey(startStep.getStepKey());
         instance.setInitiatorId(initiatorId);
+        instance.setScopeDirection(scopeDirection);
+        instance.setScopeBureau(scopeBureau);
         instance.setStatus(InstanceStatus.ACTIVE);
         instance.setVariables(initialVariables != null ? new HashMap<>(initialVariables) : new HashMap<>());
         instance = instances.save(instance);
@@ -158,9 +199,9 @@ public class WorkflowExecutionService {
         history.setActorId(initiatorId);
         histories.save(history);
 
-        log.info("Dossier {} initié sur '{}' v{} à l'étape '{}' par '{}'",
+        log.info("Dossier {} initié sur '{}' v{} à l'étape '{}' par '{}' (direction='{}', bureau='{}')",
                 instance.getId(), definitionKey, definition.getVersion(),
-                startStep.getStepKey(), initiatorId);
+                startStep.getStepKey(), initiatorId, scopeDirection, scopeBureau);
         return instance;
     }
 
@@ -243,6 +284,23 @@ public class WorkflowExecutionService {
             String comment,
             Map<String, Object> additionalVariables,
             Set<String> actorRoles) {
+        return executeTransition(
+                instanceId, action, actorId, comment, additionalVariables, actorRoles, null, null);
+    }
+
+    /**
+     * Fait franchir une étape au dossier en exécutant {@code action} avec contrôle de rôle et de périmètre.
+     */
+    @Transactional
+    public WorkflowInstance executeTransition(
+            UUID instanceId,
+            String action,
+            String actorId,
+            String comment,
+            Map<String, Object> additionalVariables,
+            Set<String> actorRoles,
+            String actorDirection,
+            String actorBureau) {
         // Verrouillage pessimiste : sérialise les transitions concurrentes sur ce dossier.
         WorkflowInstance instance = instances.findByIdWithLock(instanceId)
                 .orElseThrow(() -> new WorkflowInstanceNotFoundException(
@@ -252,6 +310,20 @@ public class WorkflowExecutionService {
         if (instance.getStatus() != InstanceStatus.ACTIVE) {
             throw new WorkflowConflictException("Le dossier " + instanceId
                     + " n'est plus actif (statut " + instance.getStatus() + ")");
+        }
+
+        // Cloisonnement organisationnel (SEC-04) : direction et bureau doivent correspondre
+        if (actorRoles != null) {
+            if (instance.getScopeDirection() != null
+                    && (actorDirection == null || !actorDirection.equals(instance.getScopeDirection()))) {
+                throw new WorkflowForbiddenException(
+                        "Action non autorisée : la direction de l'agent ne correspond pas à celle du dossier.");
+            }
+            if (instance.getScopeBureau() != null
+                    && (actorBureau == null || !actorBureau.equals(instance.getScopeBureau()))) {
+                throw new WorkflowForbiddenException(
+                        "Action non autorisée : le bureau de l'agent ne correspond pas à celui du dossier.");
+            }
         }
 
         // Fusion des variables apportées par l'appel (ex. ajout du numeroOfficiel).
@@ -310,7 +382,21 @@ public class WorkflowExecutionService {
         if (targetStep.getType() == StepType.END) {
             instance.setStatus(InstanceStatus.COMPLETED);
         }
+
+        // Marqueur de traitement dynamique (setsHandler: true)
+        if (selected.isSetsHandler()) {
+            instance.setHandlerActorId(actorId);
+            instance.setHandlerStepKey(fromStep);
+        }
+
         String toActor = null;
+        if (HANDLER_TARGET.equals(selected.getTargetStepKey())) {
+            // Ré-imputation au responsable de traitement ayant traité l'étape
+            if (instance.getHandlerActorId() != null) {
+                toActor = instance.getHandlerActorId();
+                instance.setAssigneeId(toActor);
+            }
+        }
         if (IMPUTE_ACTION.equalsIgnoreCase(action)) {
             // Chantier D : l'imputation désigne la personne (setsHandler, recette 5.3).
             toActor = assignedPerson(instance);
@@ -371,18 +457,44 @@ public class WorkflowExecutionService {
     }
 
     /**
-     * Module 6.1 — contrôle du plafond de dossiers actifs par initiateur.
-     * Désactivé si settings.maxActiveInstancesPerInitiator est absent ou &lt;= 0.
+     * MOT-05 — plafond de dossiers actifs par <strong>rôle initiateur</strong> et par
+     * <strong>type d'acte</strong>, contrôlé <strong>sous verrou</strong>.
+     * <p>
+     * Deux sources de limites, cumulées de façon la plus restrictive :
+     * <ul>
+     *   <li>les plafonds historiques non scopés {@code maxActiveInstancesPerInitiator} /
+     *       {@code maxActiveInstancesPerType} (appliqués à tous les rôles) ;</li>
+     *   <li>les règles {@code activeInstanceLimits} visant un rôle : elles ne s'appliquent
+     *       qu'aux initiateurs portant ce rôle (ex. seul l'agent de bureau est plafonné,
+     *       pas les chefs).</li>
+     * </ul>
+     * Le comptage est effectué après acquisition d'un verrou consultatif transactionnel
+     * PostgreSQL, ce qui sérialise les initiations concurrentes du même initiateur sur le
+     * même circuit (une seule peut franchir un plafond).
      */
-    private void enforceQuota(WorkflowDefinition definition, String initiatorId, String natureActe) {
+    private void enforceQuota(
+            WorkflowDefinition definition,
+            String initiatorId,
+            String natureActe,
+            Set<String> actorRoles) {
         int maxPerType = readMaxActiveInstancesPerType(definition);
         int maxPerInitiator = readMaxActiveInstances(definition);
 
-        if (maxPerType <= 0 && maxPerInitiator <= 0) {
-            return; // aucun quota configuré → on passe
+        for (Map<String, Object> limit : readActiveInstanceLimits(definition)) {
+            Object role = limit.get("role");
+            if (role != null && actorRoles != null && actorRoles.contains(role.toString())) {
+                maxPerType = mostRestrictive(maxPerType, asInt(limit.get("maxPerType")));
+                maxPerInitiator = mostRestrictive(maxPerInitiator, asInt(limit.get("maxPerInitiator")));
+            }
         }
 
-        // Si on a une règle par type ET une nature d'acte fournie, on vérifie d'abord par type
+        if (maxPerType <= 0 && maxPerInitiator <= 0) {
+            return;
+        }
+
+        // MOT-05 : contrôle SOUS VERROU — sérialise les initiations concurrentes.
+        instances.acquireQuotaLock(quotaLockKey(definition.getKey(), initiatorId));
+
         if (maxPerType > 0 && natureActe != null) {
             long activeByType = instances.countActiveInstancesByInitiatorAndNatureActe(
                     initiatorId, definition.getKey(), natureActe);
@@ -391,20 +503,8 @@ public class WorkflowExecutionService {
                         "L'agent " + initiatorId + " a déjà un dossier en cours pour le type : " + natureActe
                         + " (Max: " + maxPerType + ", Actuels: " + activeByType + ").");
             }
-            // Si on a aussi un plafond global, on le vérifie en supplément
-            if (maxPerInitiator > 0) {
-                long activeGlobal = instances.countByDefinitionIdAndInitiatorIdAndStatus(
-                        definition.getId(), initiatorId, InstanceStatus.ACTIVE);
-                if (activeGlobal >= maxPerInitiator) {
-                    throw new WorkflowQuotaExceededException(
-                            "Plafond de dossiers actifs atteint pour cet initiateur (Max: " + maxPerInitiator
-                                    + ", Actuels: " + activeGlobal + ").");
-                }
-            }
-            return;
         }
 
-        // Sinon, comportement global historique (plafond par initiateur seul)
         if (maxPerInitiator > 0) {
             long active = instances.countByDefinitionIdAndInitiatorIdAndStatus(
                     definition.getId(), initiatorId, InstanceStatus.ACTIVE);
@@ -413,6 +513,46 @@ public class WorkflowExecutionService {
                         + "pour cet initiateur (Max: " + maxPerInitiator + ", Actuels: " + active + ").");
             }
         }
+    }
+
+    /** Retient la limite la plus contraignante ; 0/absent = pas de limite. */
+    private static int mostRestrictive(int current, int candidate) {
+        if (candidate <= 0) {
+            return current;
+        }
+        if (current <= 0) {
+            return candidate;
+        }
+        return Math.min(current, candidate);
+    }
+
+    private static int asInt(Object raw) {
+        return raw instanceof Number number ? number.intValue() : 0;
+    }
+
+    /** Clé de verrou consultatif (circuit + initiateur) dérivée en 64 bits. */
+    private static long quotaLockKey(String definitionKey, String initiatorId) {
+        long definitionPart = definitionKey == null ? 0L : definitionKey.hashCode();
+        long initiatorPart = initiatorId == null ? 0L : initiatorId.hashCode();
+        return (definitionPart << 32) ^ (initiatorPart & 0xffffffffL);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> readActiveInstanceLimits(WorkflowDefinition definition) {
+        if (definition.getSettings() == null) {
+            return List.of();
+        }
+        Object raw = definition.getSettings().get("activeInstanceLimits");
+        if (!(raw instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> limits = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                limits.add((Map<String, Object>) map);
+            }
+        }
+        return limits;
     }
 
     private int readMaxActiveInstances(WorkflowDefinition definition) {
@@ -511,8 +651,8 @@ public class WorkflowExecutionService {
      *   <li>{@code INITIATEUR} : étape d'initiation (première entrée d'historique) ;</li>
      *   <li>{@code ETAPE_PRECEDENTE} (recette 6.3) : dernière étape réellement traversée
      *   ({@code from_step} de la dernière entrée d'historique) ;</li>
-     *   <li>{@code RESPONSABLE_TRAITEMENT} (recette 6.5) : étape de traitement de
-     *   référence du circuit ({@code processingStep: true}), imposée à l'import.</li>
+     *   <li>{@code RESPONSABLE_TRAITEMENT} (recette 6.5) : étape où le traitement a été
+     *   fait, mémorisée par la transition marquée {@code setsHandler: true}.</li>
      * </ul>
      */
     private String resolveTargetStep(WorkflowInstance instance, String targetStepKey) {
@@ -547,17 +687,16 @@ public class WorkflowExecutionService {
     }
 
     /**
-     * Recette 6.5 : la reprise RESPONSABLE_TRAITEMENT renvoie à l'étape de traitement
-     * de référence du circuit (unique étape {@code processingStep: true}). Le marqueur
-     * est vérifié à l'import ; on refuse la reprise si la définition n'en porte aucun
-     * (circuit construit hors import YAML).
+     * Recette 6.5 & Phase 1 : la reprise RESPONSABLE_TRAITEMENT renvoie à l'étape où le traitement
+     * a été effectivement réalisé (posé par la transition marquée {@code setsHandler: true}), que le
+     * traitement ait été délégué ou fait en direct. Refus si aucune transition marquée n'a été franchie.
      */
     private String handlerStep(WorkflowInstance instance) {
-        return steps.findFirstByDefinitionIdAndProcessingStepTrue(instance.getDefinition().getId())
-                .map(WorkflowStep::getStepKey)
-                .orElseThrow(() -> new WorkflowValidationException(
-                        "Reprise RESPONSABLE_TRAITEMENT impossible : le circuit '"
-                                + instance.getDefinition().getKey() + "' ne déclare aucune étape "
-                                + "de traitement (processingStep: true)."));
+        if (instance.getHandlerStepKey() != null && !instance.getHandlerStepKey().isBlank()) {
+            return instance.getHandlerStepKey();
+        }
+        throw new WorkflowValidationException("Reprise RESPONSABLE_TRAITEMENT impossible : le circuit '"
+                + instance.getDefinition().getKey() + "' n'a enregistré aucun responsable de traitement "
+                + "(aucune transition marquée 'setsHandler: true' n'a été franchie).");
     }
 }

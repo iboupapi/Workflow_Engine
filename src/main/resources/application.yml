@@ -53,10 +53,13 @@ springdoc:
 
 auth:
   admin:
-    # Administrateurs NOMMÉS : sujets (`sub`) des jetons JWT autorisés à administrer.
-    # Remplace le jeton fixe intérimaire (X-Admin-Token, retiré). Sans sujet nommé,
-    # personne n'est administrateur (refus par défaut). Un administrateur administre et
-    # supervise ; il ne valide JAMAIS une étape (le rôle réservé ADMIN est refusé dans owners).
+    # Administrateurs NOMMÉS : identités préfixées par l'émetteur « nomEmetteur:sub »
+    # autorisées à administrer (SEC-03). L'émetteur (clé de configuration) fait partie de
+    # l'identité comparée : un jeton d'un autre émetteur portant le même sub n'est PAS
+    # administrateur. Remplace le jeton fixe intérimaire (X-Admin-Token, retiré). Sans
+    # identité nommée, personne n'est administrateur (refus par défaut). Un administrateur
+    # administre et supervise ; il ne valide JAMAIS une étape (le rôle réservé ADMIN est
+    # refusé dans owners).
     subjects: ${ADMIN_SUBJECTS:}
   jwt:
     # Émetteurs JWT configurés (recette §2) : vide = aucun jeton accepté.

@@ -62,16 +62,17 @@ class JwtAuthenticationTest {
                 .content("""
                         {"initiatorId":"imposteur","startStepKey":"AGENT_BUREAU","variables":{"circuit":"COURT"}}"""))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.initiatorId").value("agent-jwt-01"))
+                .andExpect(jsonPath("$.initiatorId").value("test:agent-jwt-01"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
         UUID id = UUID.fromString(
                 new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).get("id").asText());
 
-        // L'historique enregistre l'identité du jeton, pas celle du corps (recette 2.5).
+        // L'historique enregistre l'identité du jeton, pas celle du corps (recette 2.5) :
+        // l'identité est préfixée par l'émetteur (« test:... », SEC-03).
         assertThat(histories.findByInstanceIdOrderByTimestampAsc(id))
-                .anySatisfy(h -> assertThat(h.getActorId()).isEqualTo("agent-jwt-01"));
+                .anySatisfy(h -> assertThat(h.getActorId()).isEqualTo("test:agent-jwt-01"));
     }
 
     @Test

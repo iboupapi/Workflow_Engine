@@ -49,4 +49,11 @@ public class WorkflowTransition {
      */
     @Column(name = "condition_expression", columnDefinition = "TEXT")
     private String conditionExpression;
+
+    /**
+     * Marqueur de transition de traitement (setsHandler: true) : son franchissement enregistre l'acteur
+     * dans handler_actor_id et l'étape d'origine dans handler_step_key sur l'instance.
+     */
+    @Column(name = "sets_handler", nullable = false)
+    private boolean setsHandler = false;
 }

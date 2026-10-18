@@ -25,7 +25,7 @@ class WorkflowAuthorizationServiceTest {
     private final WorkflowExecutionService executionService =
             Mockito.mock(WorkflowExecutionService.class);
     private final WorkflowAuthorizationService authorization =
-            new WorkflowAuthorizationService(executionService);
+            new WorkflowAuthorizationService(executionService, new ConditionEvaluatorService());
 
     @Test
     void start_allowsRoleResponsibleOfStartStep() {

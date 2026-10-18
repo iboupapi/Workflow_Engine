@@ -20,11 +20,12 @@ import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.StepConfigDTO;
 import sn.gouv.mfp.workflow.service.dto.WorkflowConfigDTO.TransitionConfigDTO;
 
 /**
- * Règles d'import du marqueur {@code processingStep} et des cibles virtuelles
- * (RESPONSABLE_TRAITEMENT, ETAPE_PRECEDENTE). Test unitaire sans base : la validation
- * graphique est exercée directement (visibilité de paquet).
+ * Règles d'import du marqueur de traitement {@code setsHandler} (porté par la transition,
+ * plus par l'étape) et des cibles virtuelles (RESPONSABLE_TRAITEMENT, ETAPE_PRECEDENTE).
+ * Test unitaire sans base : la validation graphique est exercée directement (visibilité
+ * de paquet).
  */
-class WorkflowDefinitionLoaderProcessingStepTest {
+class WorkflowDefinitionLoaderSetsHandlerTest {
 
     private final WorkflowDefinitionLoaderService loader = new WorkflowDefinitionLoaderService(
             mock(WorkflowDefinitionRepository.class),
@@ -35,36 +36,24 @@ class WorkflowDefinitionLoaderProcessingStepTest {
             mock(PlatformTransactionManager.class));
 
     @Test
-    void handlerTargetWithoutProcessingStep_shouldBeRejected() {
+    void handlerTargetWithoutSetsHandler_shouldBeRejected() {
         WorkflowConfigDTO config = config(
-                List.of(step("A", "START", null), step("B", "TASK", null), step("Z", "END", null)),
+                List.of(step("A", "START"), step("B", "TASK"), step("Z", "END")),
                 List.of(tr("A", "VALIDER", "B"),
                         tr("B", "VALIDER", "Z"),
                         tr("B", "REJETER", "RESPONSABLE_TRAITEMENT")));
 
         assertThatThrownBy(() -> loader.validateGraph(config))
                 .isInstanceOf(WorkflowValidationException.class)
-                .hasMessageContaining("processingStep");
+                .hasMessageContaining("setsHandler");
     }
 
     @Test
-    void moreThanOneProcessingStep_shouldBeRejected() {
+    void handlerTargetWithSetsHandlerTransition_shouldBeAccepted() {
         WorkflowConfigDTO config = config(
-                List.of(step("A", "START", null), step("B", "TASK", true),
-                        step("C", "TASK", true), step("Z", "END", null)),
-                List.of(tr("A", "VALIDER", "B"), tr("B", "VALIDER", "Z")));
-
-        assertThatThrownBy(() -> loader.validateGraph(config))
-                .isInstanceOf(WorkflowValidationException.class)
-                .hasMessageContaining("plusieurs");
-    }
-
-    @Test
-    void handlerTargetWithSingleProcessingStep_shouldBeAccepted() {
-        WorkflowConfigDTO config = config(
-                List.of(step("A", "START", null), step("B", "TASK", true), step("Z", "END", null)),
+                List.of(step("A", "START"), step("B", "TASK"), step("Z", "END")),
                 List.of(tr("A", "VALIDER", "B"),
-                        tr("B", "VALIDER", "Z"),
+                        trHandler("B", "VALIDER", "Z"),
                         tr("B", "REJETER", "RESPONSABLE_TRAITEMENT")));
 
         assertThatCode(() -> loader.validateGraph(config)).doesNotThrowAnyException();
@@ -72,9 +61,22 @@ class WorkflowDefinitionLoaderProcessingStepTest {
     }
 
     @Test
+    void multipleSetsHandlerTransitions_shouldBeAccepted() {
+        // Traitement délégué ET traitement direct (E-Service) : deux transitions marquées valides.
+        WorkflowConfigDTO config = config(
+                List.of(step("A", "START"), step("B", "TASK"), step("C", "TASK"), step("Z", "END")),
+                List.of(tr("A", "VALIDER", "B"),
+                        trHandler("B", "VALIDER", "C"),
+                        trHandler("C", "VALIDER", "Z"),
+                        tr("C", "REJETER", "RESPONSABLE_TRAITEMENT")));
+
+        assertThatCode(() -> loader.validateGraph(config)).doesNotThrowAnyException();
+    }
+
+    @Test
     void previousStepVirtualTarget_shouldBeAcceptedWithoutAnnotation() {
         WorkflowConfigDTO config = config(
-                List.of(step("A", "START", null), step("B", "TASK", null), step("Z", "END", null)),
+                List.of(step("A", "START"), step("B", "TASK"), step("Z", "END")),
                 List.of(tr("A", "VALIDER", "B"), tr("B", "REJETER", "ETAPE_PRECEDENTE")));
 
         assertThatCode(() -> loader.validateGraph(config)).doesNotThrowAnyException();
@@ -85,11 +87,15 @@ class WorkflowDefinitionLoaderProcessingStepTest {
                 new DefinitionConfigDTO("T", "T", 1), null, null, List.of(), steps, transitions);
     }
 
-    private StepConfigDTO step(String key, String type, Boolean processingStep) {
-        return new StepConfigDTO(key, key, type, null, List.of("AGENT"), processingStep);
+    private StepConfigDTO step(String key, String type) {
+        return new StepConfigDTO(key, key, type, null, List.of("AGENT"));
     }
 
     private TransitionConfigDTO tr(String source, String action, String target) {
         return new TransitionConfigDTO(source, action, target, null);
+    }
+
+    private TransitionConfigDTO trHandler(String source, String action, String target) {
+        return new TransitionConfigDTO(source, action, target, null, true);
     }
 }

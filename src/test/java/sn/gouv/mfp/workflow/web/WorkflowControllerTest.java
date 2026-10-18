@@ -87,7 +87,8 @@ class WorkflowControllerTest {
 
     @Test
     void start_shouldReturn201WithInstance() throws Exception {
-        when(executionService.startWorkflow(eq("GIRAFE_ACTES"), eq("agent-001"), any(), any()))
+        when(executionService.startWorkflow(
+                eq("GIRAFE_ACTES"), eq("agent-001"), any(), any(), any(), any(), any()))
                 .thenReturn(givenInstance("S_VISA", InstanceStatus.ACTIVE));
 
         mockMvc.perform(post("/api/workflows/GIRAFE_ACTES/start")
@@ -104,7 +105,7 @@ class WorkflowControllerTest {
 
     @Test
     void start_withUnknownKey_shouldReturn404() throws Exception {
-        when(executionService.startWorkflow(eq("INCONNU"), any(), any(), any()))
+        when(executionService.startWorkflow(eq("INCONNU"), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowNotFoundException("Aucune définition"));
 
         mockMvc.perform(post("/api/workflows/INCONNU/start")
@@ -119,7 +120,7 @@ class WorkflowControllerTest {
     void transition_shouldReturn200WithAdvancedInstance() throws Exception {
         UUID id = UUID.randomUUID();
         when(executionService.executeTransition(
-                        eq(id), eq("VALIDER"), eq("agent-002"), any(), any(), any()))
+                        eq(id), eq("VALIDER"), eq("agent-002"), any(), any(), any(), any(), any()))
                 .thenReturn(givenInstance("DGFP", InstanceStatus.COMPLETED));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -135,7 +136,7 @@ class WorkflowControllerTest {
     @Test
     void transition_onCompletedInstance_shouldReturn409() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowConflictException("Dossier non actif"));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -149,7 +150,7 @@ class WorkflowControllerTest {
     @Test
     void transition_withInvalidAction_shouldReturn400() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowValidationException("Aucune transition valide"));
 
         mockMvc.perform(post("/api/instances/{instanceId}/transition", id)
@@ -162,7 +163,8 @@ class WorkflowControllerTest {
 
     @Test
     void start_overQuota_shouldReturn409() throws Exception {
-        when(executionService.startWorkflow(eq("GIRAFE_ACTES"), eq("agent-001"), any(), any()))
+        when(executionService.startWorkflow(
+                eq("GIRAFE_ACTES"), eq("agent-001"), any(), any(), any(), any(), any()))
                 .thenThrow(new WorkflowQuotaExceededException(
                         "Plafond de dossiers actifs atteint pour cet initiateur (Max: 1, Actuels: 1)."));
 
@@ -177,7 +179,7 @@ class WorkflowControllerTest {
     @Test
     void transition_missingRequiredData_shouldReturn400() throws Exception {
         UUID id = UUID.randomUUID();
-        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any()))
+        when(executionService.executeTransition(eq(id), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new MissingRequiredDataException(
                         "Validation impossible. Donnée(s) obligatoire(s) manquante(s) "
                                 + "pour l'étape [NUMEROTEUR] : [numeroOfficiel]."));
@@ -192,7 +194,8 @@ class WorkflowControllerTest {
 
     @Test
     void start_invalidEntryPoint_shouldReturn400() throws Exception {
-        when(executionService.startWorkflow(eq("GIRAFE_ACTES"), eq("agent-001"), any(), any()))
+        when(executionService.startWorkflow(
+                eq("GIRAFE_ACTES"), eq("agent-001"), any(), any(), any(), any(), any()))
                 .thenThrow(new InvalidEntryPointException(
                         "Point d'entrée 'S_VISA' non autorisé."));
 

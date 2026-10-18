@@ -26,8 +26,8 @@ import sn.gouv.mfp.workflow.repository.WorkflowTransitionRepository;
 
 /**
  * Chantier D — cibles de rejet dynamiques (ETAPE_PRECEDENTE, RESPONSABLE_TRAITEMENT
- * résolue vers l'étape {@code processingStep: true}), imputation avec traçabilité
- * (setsHandler) et rejet définitif (statut REJECTED_FINAL).
+ * résolue vers l'étape mémorisée par la transition {@code setsHandler: true}), imputation
+ * avec traçabilité et rejet définitif (statut REJECTED_FINAL).
  */
 @SpringBootTest
 @Transactional
@@ -82,7 +82,7 @@ class WorkflowRejectTargetsTest {
     }
 
     @Test
-    void rejectToHandler_shouldReturnToAnnotatedProcessingStep() {
+    void rejectToHandler_shouldReturnToRecordedHandlerStep() {
         givenCircuit("HAND_" + unique(), false);
 
         WorkflowInstance instance =
@@ -97,12 +97,12 @@ class WorkflowRejectTargetsTest {
         WorkflowInstance rejected = executionService.executeTransition(
                 instance.getId(), "REJETER", "verif-01", "À reprendre", null);
 
-        // Retour à B, étape de traitement de référence (processingStep: true).
+        // Retour à B, étape mémorisée par la transition B -AVANCER-> C (setsHandler: true).
         assertThat(rejected.getCurrentStepKey()).isEqualTo("B");
     }
 
     @Test
-    void rejectToHandler_shouldReturnToProcessingStepWithoutAssignee() {
+    void rejectToHandler_shouldReturnToRecordedHandlerStepWithoutAssignee() {
         givenCircuit("HAND2_" + unique(), false);
 
         WorkflowInstance instance =
@@ -113,7 +113,7 @@ class WorkflowRejectTargetsTest {
         WorkflowInstance rejected = executionService.executeTransition(
                 instance.getId(), "REJETER", "agent-003", "À reprendre", null);
 
-        // Sans imputation, la reprise vise tout de même l'étape de traitement de référence.
+        // Sans imputation, la reprise vise tout de même l'étape mémorisée (B).
         assertThat(rejected.getCurrentStepKey()).isEqualTo("B");
     }
 
@@ -141,7 +141,7 @@ class WorkflowRejectTargetsTest {
         assertThatThrownBy(() -> executionService.executeTransition(
                         instance.getId(), "REJETER", "agent-003", null, null))
                 .isInstanceOf(WorkflowValidationException.class)
-                .hasMessageContaining("processingStep");
+                .hasMessageContaining("setsHandler");
     }
 
     @Test
@@ -237,15 +237,15 @@ class WorkflowRejectTargetsTest {
         definition = definitions.save(definition);
 
         WorkflowStep a = newStep(definition, "A", StepType.START);
-        // B est l'étape de traitement de référence (cible RESPONSABLE_TRAITEMENT) : le
-        // marqueur est posé AVANT l'INSERT (workflow_step est immuable, aucun UPDATE applicatif).
-        WorkflowStep b = newStep(definition, "B", StepType.TASK, true);
+        // B est l'étape de traitement : c'est la transition B -AVANCER-> C qui porte le
+        // marqueur setsHandler, donc son franchissement mémorise B comme responsable de traitement.
+        WorkflowStep b = newStep(definition, "B", StepType.TASK);
         WorkflowStep c = newStep(definition, "C", StepType.TASK);
         if (finalRejection) {
             newStep(definition, "FIN", StepType.END);
         }
         newTransition(a, "AVANCER", "B");
-        newTransition(b, "AVANCER", "C");
+        newTransition(b, "AVANCER", "C", true);
         newTransition(a, "REJETER", "ETAPE_PRECEDENTE");
         newTransition(b, "IMPUTER", "B");
         newTransition(c, "REJETER", "RESPONSABLE_TRAITEMENT");
@@ -256,29 +256,106 @@ class WorkflowRejectTargetsTest {
     }
 
     private WorkflowStep newStep(WorkflowDefinition definition, String stepKey, StepType type) {
-        return newStep(definition, stepKey, type, false);
-    }
-
-    /**
-     * Variante avec marqueur {@code processingStep}. Le flag est inclus dans l'INSERT :
-     * le compte applicatif n'a pas le droit d'UPDATE sur {@code workflow_step}
-     * (privilèges minimaux + déclencheur d'immuabilité, recette 8.2/8.5).
-     */
-    private WorkflowStep newStep(
-            WorkflowDefinition definition, String stepKey, StepType type, boolean processingStep) {
         WorkflowStep step = new WorkflowStep();
         step.setDefinition(definition);
         step.setStepKey(stepKey);
         step.setType(type);
-        step.setProcessingStep(processingStep);
         return steps.save(step);
     }
 
+    @Test
+    void rejectToHandler_inDelegatedTreatment_shouldReturnToDelegatedAgentAndStep() {
+        String key = "ESERV_DEL_" + unique();
+        WorkflowDefinition definition = new WorkflowDefinition();
+        definition.setKey(key);
+        definition.setVersion(1);
+        definition.setName("Circuit E-Service Délégation " + key);
+        definition = definitions.save(definition);
+
+        WorkflowStep depot = newStep(definition, "DEPOT", StepType.START);
+        WorkflowStep chef = newStep(definition, "CHEF_DIVISION", StepType.TASK);
+        WorkflowStep agent = newStep(definition, "AGENT", StepType.TASK);
+        WorkflowStep dlec = newStep(definition, "DLEC", StepType.TASK);
+        newStep(definition, "FIN", StepType.END);
+
+        newTransition(depot, "SOUMETTRE", "CHEF_DIVISION");
+        newTransition(chef, "IMPUTER", "AGENT");
+        newTransition(agent, "VALIDER", "CHEF_DIVISION", true); // setsHandler: true
+        newTransition(chef, "VALIDER", "DLEC");
+        newTransition(dlec, "REJETER", "RESPONSABLE_TRAITEMENT");
+
+        // 1. Usager soumet
+        WorkflowInstance instance = executionService.startWorkflow(key, "usager-01", null, "DEPOT");
+        executionService.executeTransition(instance.getId(), "SOUMETTRE", "usager-01", null, null);
+
+        // 2. Chef impute à agent-042
+        executionService.executeTransition(instance.getId(), "IMPUTER", "chef-01", null,
+                Map.of("assignee", "agent-042"));
+
+        // 3. Agent traite et valide (setsHandler: true)
+        executionService.executeTransition(instance.getId(), "VALIDER", "agent-042", "Traité", null);
+
+        // 4. Chef valide vers DLEC
+        executionService.executeTransition(instance.getId(), "VALIDER", "chef-01", null, null);
+        assertAt(instance.getId(), "DLEC");
+
+        // 5. DLEC rejette vers RESPONSABLE_TRAITEMENT
+        WorkflowInstance rejected = executionService.executeTransition(
+                instance.getId(), "REJETER", "dlec-01", "Dossier incomplet", null);
+
+        // Vérification : retour à AGENT et ré-imputé à agent-042
+        assertThat(rejected.getCurrentStepKey()).isEqualTo("AGENT");
+        assertThat(rejected.getAssigneeId()).isEqualTo("agent-042");
+    }
+
+    @Test
+    void rejectToHandler_inDirectTreatment_shouldReturnToDirectChefAndStep() {
+        String key = "ESERV_DIR_" + unique();
+        WorkflowDefinition definition = new WorkflowDefinition();
+        definition.setKey(key);
+        definition.setVersion(1);
+        definition.setName("Circuit E-Service Traitement Direct " + key);
+        definition = definitions.save(definition);
+
+        WorkflowStep depot = newStep(definition, "DEPOT", StepType.START);
+        WorkflowStep chef = newStep(definition, "CHEF_DIVISION", StepType.TASK);
+        WorkflowStep agent = newStep(definition, "AGENT", StepType.TASK);
+        WorkflowStep dlec = newStep(definition, "DLEC", StepType.TASK);
+        newStep(definition, "FIN", StepType.END);
+
+        newTransition(depot, "SOUMETTRE", "CHEF_DIVISION");
+        newTransition(chef, "IMPUTER", "AGENT");
+        newTransition(agent, "VALIDER", "CHEF_DIVISION", true);
+        newTransition(chef, "VALIDER", "DLEC", true); // setsHandler: true pour traitement direct
+        newTransition(dlec, "REJETER", "RESPONSABLE_TRAITEMENT");
+
+        // 1. Usager soumet
+        WorkflowInstance instance = executionService.startWorkflow(key, "usager-01", null, "DEPOT");
+        executionService.executeTransition(instance.getId(), "SOUMETTRE", "usager-01", null, null);
+
+        // 2. Chef NE délègue PAS : il valide directement vers DLEC (setsHandler: true)
+        executionService.executeTransition(instance.getId(), "VALIDER", "chef-01", "Validé en direct", null);
+        assertAt(instance.getId(), "DLEC");
+
+        // 3. DLEC rejette vers RESPONSABLE_TRAITEMENT
+        WorkflowInstance rejected = executionService.executeTransition(
+                instance.getId(), "REJETER", "dlec-01", "Erreur sur le direct", null);
+
+        // Vérification : retour à CHEF_DIVISION et ré-imputé à chef-01
+        assertThat(rejected.getCurrentStepKey()).isEqualTo("CHEF_DIVISION");
+        assertThat(rejected.getAssigneeId()).isEqualTo("chef-01");
+    }
+
     private void newTransition(WorkflowStep source, String action, String target) {
+        newTransition(source, action, target, false);
+    }
+
+    private void newTransition(WorkflowStep source, String action, String target, boolean setsHandler) {
         WorkflowTransition transition = new WorkflowTransition();
         transition.setSourceStep(source);
         transition.setAction(action);
         transition.setTargetStepKey(target);
+        transition.setSetsHandler(setsHandler);
         transitions.save(transition);
     }
 }

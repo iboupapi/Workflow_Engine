@@ -7,13 +7,14 @@ Aucun nouvel endpoint n'est public par oubli (refus par défaut).
 
 | Zone            | Identité acceptée                                   | Rôle requis |
 |-----------------|-----------------------------------------------------|-------------|
-| `/api/admin/**` | JWT d'un émetteur configuré, sujet **administrateur nommé** | `ADMIN` |
+| `/api/admin/**` | JWT d'un émetteur configuré, identité **administrateur nommé** (`nomEmetteur:sub`) | `ADMIN` |
 | `/api/**`       | JWT d'un émetteur configuré                          | authentifié + rôle d'étape |
 | Swagger, `/v3/api-docs`, `/error` | —                                    | public      |
 
 Le **jeton fixe administrateur** (`X-Admin-Token`) a été **retiré**. L'administration
-exige désormais un **administrateur nommé** : une identité réelle dont le sujet (`sub`
-du JWT) est déclaré dans `auth.admin.subjects`. L'audit d'import consigne ce sujet.
+exige désormais un **administrateur nommé** : une identité réelle **préfixée par son
+émetteur** (`nomEmetteur:sub`, SEC-03, voir ci-dessous) déclarée dans
+`auth.admin.subjects`. L'audit d'import consigne cette identité.
 
 Un administrateur **administre et supervise** ; il **n'est jamais validateur d'étape**
 (voir ci-dessous).
@@ -31,8 +32,8 @@ Un administrateur **administre et supervise** ; il **n'est jamais validateur d'�
 
 Vérifiés à chaque requête : signature, émetteur, audience, expiration — sinon 401.
 Sans émetteur configuré, aucun JWT n'est accepté. L'identité d'exécution est
-TOUJOURS le sujet du jeton (`RequestActor`) : la valeur `actorId`/`initiatorId`
-du corps est ignorée dès qu'un JWT est présent (recette 2.5).
+TOUJOURS l'identité du jeton, **préfixée par l'émetteur** (`nomEmetteur:sub`, SEC-03) :
+la valeur `actorId`/`initiatorId` du corps est ignorée dès qu'un JWT est présent (recette 2.5).
 
 ### Correspondance des rôles (`role-mapping`)
 
@@ -66,7 +67,32 @@ une revendication de premier niveau.
 Un rôle moteur est accordé dès que le jeton porte l'un des rôles listés. **Sans**
 `role-mapping`, **aucun rôle n'est accordé** (défaut sûr : jamais l'identité du jeton).
 Un rôle du jeton **non reconnu n'accorde aucun droit**, et le rôle réservé `ADMIN` n'est
-**jamais** dérivé du jeton (seuls les sujets nommés de `auth.admin.subjects` le reçoivent).
+**jamais** dérivé du jeton (seuls les identités nommées de `auth.admin.subjects` le reçoivent).
+
+## Identité préfixée par l'émetteur (SEC-03)
+
+L'identité d'exécution d'un jeton est **toujours préfixée par le nom de l'émetteur** :
+`nomEmetteur:sub`, où `nomEmetteur` est la **clé de configuration** de l'émetteur
+(`auth.jwt.issuers.<nom>`, ex. `agents`, `usagers`) — et non l'adresse `iss` complète,
+trop longue et susceptible de changer. Le séparateur est le **premier** `:` (un nom
+d'émetteur ne doit donc pas contenir `:`). Exemples : `agents:agent-001`,
+`usagers:citoyen-123`.
+
+Conséquences :
+
+- deux émetteurs aux `sub` identiques ne peuvent **pas** se confondre (histoires,
+  plafonds, imputations) ;
+- la liste `auth.admin.subjects` contient des identités **préfixées**
+  (`agents:matricule-admin`) et le contrôle d'administrateur compare l'identité
+  **complète**, émetteur inclus — un jeton du portail citoyen dont le `sub` serait
+  celui d'un administrateur d'un autre émetteur **n'est pas** administrateur ;
+- les valeurs `actorId`/`initiatorId` du corps restent ignorées (recette 2.5).
+
+**Historique existant :** les lignes antérieures à SEC-03 conservent l'ancien format
+(`sub` seul). L'historique étant **immuable**, ces lignes ne sont **pas** réécrites :
+`schema_version`/en-tête de trace devra le noter côté applications consommatrices.
+Les colonnes d'identité ont été élargies à `varchar(512)` (migration `V11`) pour
+absorber le préfixe.
 
 ## Contrôle par rôle d'étape (YAML versionné)
 
@@ -98,7 +124,7 @@ portée des collègues de rôle. Invisible = **404**.
 ```yaml
 auth:
   admin:
-    subjects: ["admin-01"]
+    subjects: ["test:admin-01"]   # identité préfixée par l'émetteur (SEC-03)
   jwt:
     issuers:
       test:

@@ -50,17 +50,34 @@ public class WorkflowInstance {
     @Column(name = "current_step_key", nullable = false)
     private String currentStepKey;
 
-    /** Identifiant de l'agent ayant initié le dossier (ex. matricule). Nullable pour compatibilité avec les dossiers pré-existants. */
-    @Column(name = "initiator_id")
+    /** Identité de l'agent ayant initié le dossier (ex. matricule), préfixée par l'émetteur
+     *  (« nomEmetteur:sub », SEC-03). Nullable pour compatibilité avec les dossiers pré-existants. */
+    @Column(name = "initiator_id", length = 512)
     private String initiatorId;
 
     /**
-     * Identifiant de la personne à qui le dossier est imputé (lecture seule à ce stade :
+     * Identité de la personne à qui le dossier est imputé (lecture seule à ce stade :
      * l'écriture viendra avec l'action IMPUTER du chantier D). Un dossier imputé sort
      * de la boîte collective du rôle : seul l'assigné (plus initiateur et admin) le voit.
      */
-    @Column(name = "assignee_id")
+    @Column(name = "assignee_id", length = 512)
     private String assigneeId;
+
+    /** Direction de l'initiateur (copiée du JWT à la création). */
+    @Column(name = "scope_direction", length = 128)
+    private String scopeDirection;
+
+    /** Bureau de l'initiateur (copié du JWT à la création). */
+    @Column(name = "scope_bureau", length = 128)
+    private String scopeBureau;
+
+    /** Acteur ayant effectué le traitement de référence (posé par setsHandler). */
+    @Column(name = "handler_actor_id", length = 512)
+    private String handlerActorId;
+
+    /** Étape où le traitement a été effectué (posée par setsHandler), cible de RESPONSABLE_TRAITEMENT. */
+    @Column(name = "handler_step_key", length = 64)
+    private String handlerStepKey;
 
     /** Horodatage UTC de création, pour le tri stable de la recherche. */
     @Column(name = "created_at", nullable = false)

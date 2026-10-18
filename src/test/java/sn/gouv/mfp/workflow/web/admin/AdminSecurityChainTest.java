@@ -28,7 +28,13 @@ import sn.gouv.mfp.workflow.web.JwtTestTokens;
     "auth.jwt.issuers.test.audience=workflow-api",
     "auth.jwt.issuers.test.hmac-secret=jeton-test-local-32-octets-min!!",
     "auth.jwt.issuers.test.roles-claim=roles",
-    "auth.admin.subjects=admin-01"
+    // Second émetteur : sert à prouver que le préfixe d'émetteur fait partie de l'identité.
+    "auth.jwt.issuers.usagers.issuer=https://usagers.mfp.local",
+    "auth.jwt.issuers.usagers.audience=workflow-api",
+    "auth.jwt.issuers.usagers.hmac-secret=jeton-test-local-32-octets-min!!",
+    "auth.jwt.issuers.usagers.roles-claim=roles",
+    // Administrateur nommé : identité PRÉFIXÉE par l'émetteur (SEC-03).
+    "auth.admin.subjects=test:admin-01"
 })
 class AdminSecurityChainTest {
 
@@ -49,6 +55,21 @@ class AdminSecurityChainTest {
     @Test
     void importWithNonAdminToken_shouldReturn403() throws Exception {
         String token = JwtTestTokens.signed("agent-01", List.of("AGENT_BUREAU"));
+        mockMvc.perform(post("/api/admin/workflows/import")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/x-yaml")
+                        .content(minimalYaml()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminSubjectFromAnotherIssuer_shouldNotBeAdmin() throws Exception {
+        // Même `sub` que l'administrateur nommé, mais émetteur différent : l'identité
+        // complète (« usagers:admin-01 ») ne figure pas dans auth.admin.subjects → 403.
+        String token = JwtTestTokens.signed(
+                "https://usagers.mfp.local", JwtTestTokens.AUDIENCE, "admin-01",
+                List.of(), java.time.Instant.now().plusSeconds(300), JwtTestTokens.SECRET);
+
         mockMvc.perform(post("/api/admin/workflows/import")
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/x-yaml")

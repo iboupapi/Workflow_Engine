@@ -71,8 +71,18 @@ public class WorkflowReadService {
         this.transitions = transitions;
     }
 
-    /** Demandeur : identité (sujet du jeton), rôles (sans préfixe) et administration. */
-    public record Viewer(String userId, Set<String> roles, boolean admin) {
+    /** Demandeur : identité (sujet du jeton), rôles (sans préfixe), administration, audit et périmètre. */
+    public record Viewer(
+            String userId,
+            Set<String> roles,
+            boolean admin,
+            boolean auditor,
+            String direction,
+            String bureau) {
+
+        public Viewer(String userId, Set<String> roles, boolean admin) {
+            this(userId, roles, admin, roles != null && roles.contains("AUDITEUR"), null, null);
+        }
 
         public static Viewer from(Authentication authentication) {
             if (authentication instanceof JwtAuthenticationToken jwt) {
@@ -81,9 +91,13 @@ public class WorkflowReadService {
                                 ? a.getAuthority().substring("ROLE_".length())
                                 : a.getAuthority())
                         .collect(Collectors.toSet());
-                return new Viewer(jwt.getName(), roles, roles.contains("ADMIN"));
+                boolean admin = roles.contains("ADMIN");
+                boolean auditor = roles.contains("AUDITEUR");
+                String direction = jwt.getToken().getClaimAsString("direction");
+                String bureau = jwt.getToken().getClaimAsString("bureau");
+                return new Viewer(jwt.getName(), roles, admin, auditor, direction, bureau);
             }
-            return new Viewer(null, Set.of(), false);
+            return new Viewer(null, Set.of(), false, false, null, null);
         }
     }
 
@@ -187,9 +201,9 @@ public class WorkflowReadService {
      */
     public Page<WorkflowInstance> search(
             Viewer viewer, SearchCriteria criteria, Pageable pageable) {
-        if (criteria.view() == InstanceView.ALL && !viewer.admin()) {
+        if (criteria.view() == InstanceView.ALL && !viewer.admin() && !viewer.auditor()) {
             throw new WorkflowForbiddenException(
-                    "La vue complète est réservée aux administrateurs.");
+                    "La vue complète est réservée aux administrateurs et auditeurs.");
         }
         int size = Math.min(Math.max(pageable.getPageSize(), 1), MAX_PAGE_SIZE);
         // Cache des rôles responsables par définition : une seule requête d'étapes par
@@ -277,7 +291,7 @@ public class WorkflowReadService {
             Viewer viewer,
             Map<UUID, Map<String, List<String>>> ownersCache,
             boolean includeTraversed) {
-        if (viewer.admin()) {
+        if (viewer.admin() || viewer.auditor()) {
             return true;
         }
         if (viewer.userId() != null
@@ -285,7 +299,7 @@ public class WorkflowReadService {
                         || viewer.userId().equals(instance.getAssigneeId()))) {
             return true;
         }
-        // Règle de lecture (point 2) : rôle de l'étape courante (ou traversée en direct).
+        // Règle de lecture : rôle de l'étape courante (ou traversée en direct) dans le même périmètre.
         return instance.getStatus() == InstanceStatus.ACTIVE
                 && readableByRole(instance, viewer, ownersCache, includeTraversed);
     }
@@ -303,6 +317,7 @@ public class WorkflowReadService {
      * retenant que l'étape courante. Un dossier imputé à quelqu'un d'autre sort de la
      * portée des collègues de rôle (seuls assigné, initiateur et administrateur le voient).
      * Le rôle réservé {@code ADMIN} n'est jamais compté comme responsable d'étape.
+     * Cloisonnement organisationnel : direction et bureau doivent correspondre (SEC-04).
      */
     private boolean readableByRole(
             WorkflowInstance instance,
@@ -315,6 +330,17 @@ public class WorkflowReadService {
         if (instance.getAssigneeId() != null
                 && !instance.getAssigneeId().equals(viewer.userId())) {
             return false;
+        }
+        // Contrôle du périmètre organisationnel (direction et bureau)
+        if (instance.getScopeDirection() != null) {
+            if (viewer.direction() == null || !viewer.direction().equals(instance.getScopeDirection())) {
+                return false;
+            }
+        }
+        if (instance.getScopeBureau() != null) {
+            if (viewer.bureau() == null || !viewer.bureau().equals(instance.getScopeBureau())) {
+                return false;
+            }
         }
         Set<String> owners = ownersOfRelevantSteps(instance, ownersCache, includeTraversed);
         return viewer.roles().stream()

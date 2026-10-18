@@ -30,9 +30,10 @@ psql -U postgres -d workflow_db \
 
 # 2. Démarrer l'application avec les trois secrets :
 SPRING_DATASOURCE_USERNAME=workflow_app SPRING_DATASOURCE_PASSWORD=... \
-AUTH_ADMIN_SUBJECTS=matricule-admin ./mvnw spring-boot:run
-# Administration par JETON : AUTH_ADMIN_SUBJECTS liste les sujets administrateurs nommés
-# (aucun jeton fixe). Voir docs/authentification.md.
+AUTH_ADMIN_SUBJECTS=agents:matricule-admin ./mvnw spring-boot:run
+# Administration par JETON : AUTH_ADMIN_SUBJECTS liste les identités administrateurs
+# nommées, préfixées par l'émetteur « nomEmetteur:sub » (SEC-03 ; aucun jeton fixe).
+# Voir docs/authentification.md.
 # L'application NE MIGRE JAMAIS (garde-fou testé : FlywayProdGuardTest) et ne
 # détient jamais les identifiants du propriétaire.
 

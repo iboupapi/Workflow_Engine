@@ -8,18 +8,22 @@ definition:
   name: "Circuit de Validation des Actes Administratifs"
   version: 1
 
-# Configuration globale des règles métiers
-  settings:
-    # Plafond par type d'acte : maximum 1 dossier ACTIVE par initiateur et par nature d'acte.
-    # Exemple : un agent ne peut pas avoir deux projets "ARRETE" en cours simultanément.
-    maxActiveInstancesPerType: 1
-    # Plafond par initiateur (tel quel, tel quel) — laissé à 0 par défaut si non utilisé.
-    maxActiveInstancesPerInitiator: 0
-    # Stratégie de reprise PROVISOIRE : FROM_START fait reprendre le circuit depuis le
-    # début après un rejet. FROM_REJECTING_STEP renverrait directement à l'étape émettrice
-    # en sautant la hiérarchie (ex. retour à la DPB sans revoir chef de bureau, chef de
-    # division ni S-Visa) — à trancher à l'atelier métier. Voir docs/yaml-format-schema.md.
-    resumeStrategyDefault: "FROM_START"
+# Configuration globale des règles métiers. Bloc RACINE : il doit être au même niveau que
+# `definition`, jamais indenté dessous (un champ mal placé est refusé à l'import).
+settings:
+  # MOT-05 — Plafond de dossiers actifs par RÔLE initiateur ET par type d'acte.
+  # Le document officiel ne plafonne que l'agent de bureau, alors que le chef de bureau et
+  # le chef de division peuvent aussi initier : un plafond global bloquerait des chefs à tort.
+  # La règle ci-dessous ne vise donc QUE le rôle AGENT_BUREAU : un agent ne peut pas avoir
+  # deux dossiers en cours pour la même nature d'acte (ex. deux "ARRETE").
+  activeInstanceLimits:
+    - role: "AGENT_BUREAU"
+      maxPerType: 1
+  # Stratégie de reprise PROVISOIRE : FROM_START fait reprendre le circuit depuis le
+  # début après un rejet. FROM_REJECTING_STEP renverrait directement à l'étape émettrice
+  # en sautant la hiérarchie (ex. retour à la DPB sans revoir chef de bureau, chef de
+  # division ni S-Visa) — à trancher à l'atelier métier. Voir docs/yaml-format-schema.md.
+  resumeStrategyDefault: "FROM_START"
 
 # Points d'entrée autorisés selon le rôle de l'initiateur
 entryPoints:

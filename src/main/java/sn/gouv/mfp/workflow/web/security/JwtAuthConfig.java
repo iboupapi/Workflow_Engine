@@ -14,6 +14,8 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationManagerResolver;
 import org.springframework.security.core.GrantedAuthority;
@@ -26,8 +28,8 @@ import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 
@@ -82,15 +84,28 @@ public class JwtAuthConfig {
                 audiences -> audiences != null && audiences.contains(issuer.audience()));
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(), audience));
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         String rolesClaim = issuer.rolesClaim() != null && !issuer.rolesClaim().isBlank()
                 ? issuer.rolesClaim()
                 : "roles";
-        converter.setJwtGrantedAuthoritiesConverter(
-                jwt -> authorities(jwt, rolesClaim, issuer.roleMapping(), admins));
+        // L'acteur porte une identité PRÉFIXÉE par le nom (clé de configuration) de l'émetteur :
+        // « nomEmetteur:sub » (SEC-03). Deux émetteurs aux sub identiques ne peuvent donc pas
+        // se confondre, et le contrôle d'administrateur compare l'identité complète (émetteur inclus).
+        Converter<Jwt, AbstractAuthenticationToken> converter = jwt -> new JwtAuthenticationToken(
+                jwt,
+                authorities(jwt, name, rolesClaim, issuer.roleMapping(), admins),
+                identity(name, jwt.getSubject()));
         JwtAuthenticationProvider provider = new JwtAuthenticationProvider(decoder);
         provider.setJwtAuthenticationConverter(converter);
         return provider::authenticate;
+    }
+
+    /**
+     * Identité certifiée de l'acteur : {@code nomEmetteur:sub} (le nom est la clé de
+     * configuration de l'émetteur, ex. {@code agents}, {@code usagers}). Le séparateur est
+     * le premier {@code :} ; un nom d'émetteur ne doit donc pas contenir {@code :}.
+     */
+    static String identity(String issuerName, String subject) {
+        return subject == null || subject.isBlank() ? issuerName : issuerName + ":" + subject;
     }
 
     /**
@@ -99,12 +114,13 @@ public class JwtAuthConfig {
      *   <li>rôles <strong>moteur</strong> : traduits depuis les rôles du jeton par la
      *   correspondance de l'émetteur (ou identité si aucune correspondance) — un rôle
      *   du jeton non reconnu n'accorde rien ;</li>
-     *   <li>{@code ROLE_ADMIN} : uniquement si le sujet du jeton est un administrateur
-     *   nommé ({@code auth.admin.subjects}).</li>
+     *   <li>{@code ROLE_ADMIN} : uniquement si l'identité complète ({@code nomEmetteur:sub})
+     *   figure dans {@code auth.admin.subjects} — l'émetteur est donc vérifié aussi.</li>
      * </ul>
      */
     private List<GrantedAuthority> authorities(
             Jwt jwt,
+            String issuerName,
             String rolesClaim,
             Map<String, List<String>> roleMapping,
             AdminProperties admins) {
@@ -113,7 +129,7 @@ public class JwtAuthConfig {
         engineRoles.stream()
                 .filter(role -> role != null && !role.isBlank())
                 .forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
-        if (jwt.getSubject() != null && admins.subjectsOrEmpty().contains(jwt.getSubject())) {
+        if (admins.subjectsOrEmpty().contains(identity(issuerName, jwt.getSubject()))) {
             authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         }
         return authorities;

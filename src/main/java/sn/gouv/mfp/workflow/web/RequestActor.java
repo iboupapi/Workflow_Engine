@@ -7,7 +7,8 @@ import org.springframework.stereotype.Component;
 /**
  * Identité certifiée de l'acteur d'exécution (cahier de recette 2.5).
  * <p>
- * Avec un JWT, l'acteur est TOUJOURS le sujet du jeton (claim {@code sub}) : la
+ * Avec un JWT, l'acteur est TOUJOURS l'identité portée par le jeton : le sujet (claim
+ * {@code sub}) préfixé par le nom de l'émetteur ({@code nomEmetteur:sub}, SEC-03) — la
  * valeur {@code actorId}/{@code initiatorId} du corps de requête est ignorée et ne
  * peut donc jamais usurper ni compléter l'identité. Le repli sur la valeur du corps
  * n'existe que pour les tests : en production, une requête sans JWT est rejetée

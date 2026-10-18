@@ -2,7 +2,9 @@
 # BROUILLON — CIRCUIT E-SERVICE (Demandes citoyennes). Hypothèses signalées
 # ci-dessous, à valider avec le métier (§14 du cahier de recette).
 # La cible RESPONSABLE_TRAITEMENT est supportée par le moteur : elle renvoie à
-# l'unique étape marquée « processingStep: true » (ici AGENT_TRAITEMENT).
+# l'étape où le traitement a été fait, mémorisée par la transition marquée
+# « setsHandler: true » (ici AGENT_TRAITEMENT -TRANSMETTRE-> CHEF_DIVISION pour le
+# traitement délégué, et CHEF_DIVISION -VALIDER-> DLEC pour le traitement direct).
 # ==============================================================================
 definition:
   key: "E_SERVICE_DEMANDE"
@@ -40,9 +42,6 @@ steps:
   - key: "AGENT_TRAITEMENT"
     name: "Agent traitant"
     type: "TASK"
-    # Étape de traitement de référence : cible de la reprise RESPONSABLE_TRAITEMENT
-    # après rejet (une seule étape annotée par circuit, imposé à l'import).
-    processingStep: true
     owners:
       - "AGENT_TRAITEMENT"
 
@@ -83,11 +82,13 @@ transitions:
   - source: "AGENT_TRAITEMENT"
     action: "TRANSMETTRE"
     target: "CHEF_DIVISION"
+    setsHandler: true
 
   # Traitement direct (le chef valide lui-même) et retour de délégation convergent ici.
   - source: "CHEF_DIVISION"
     action: "VALIDER"
     target: "DLEC"
+    setsHandler: true
 
   - source: "DLEC"
     action: "VALIDER"
@@ -102,8 +103,8 @@ transitions:
     target: "DEMANDE_TRAITEE"
 
   # Rejets : le rapport impose le retour au responsable du traitement, cible désormais
-  # supportée par le moteur (renvoi vers l'unique étape processingStep: true, ici
-  # AGENT_TRAITEMENT). Le rejet du chef de division à la réception garde la cible
+  # supportée par le moteur (renvoi vers l'étape mémorisée par la transition marquée
+  # « setsHandler: true »). Le rejet du chef de division à la réception garde la cible
   # INITIATEUR (le citoyen), si le ministère confirme ce renvoi.
   - source: "CHEF_DIVISION"
     action: "REJETER"
