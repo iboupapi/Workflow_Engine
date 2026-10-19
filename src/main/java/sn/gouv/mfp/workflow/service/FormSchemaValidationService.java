@@ -10,6 +10,8 @@ import com.networknt.schema.ValidationMessage;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 import sn.gouv.mfp.workflow.domain.request.FormSchema;
 import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
@@ -23,9 +25,8 @@ import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
  * échouer la soumission au lieu de l'accepter par défaut.
  * <p>
  * Le schéma est fourni par la version publiée du type de demande
- * ({@code request_type_version}/{@code form_schema}), donc immuable : la compilation est
- * refaite à chaque appel. Un cache par identifiant de schéma pourra être ajouté lorsque
- * l'endpoint de soumission existera et que le volume le justifiera.
+ * ({@code request_type_version}/{@code form_schema}), donc immuable : les schémas compilés
+ * sont mémoïsés par identifiant de {@code form_schema} (voir {@link #compiledSchema}).
  * <p>
  * Les messages d'écart proviennent de la bibliothèque de validation et sont en anglais
  * (la localisation FRM-06 des messages de formulaire reste à traiter).
@@ -40,6 +41,9 @@ public class FormSchemaValidationService {
             JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
     private static final SchemaValidatorsConfig STRICT_CONFIG = strictConfig();
+
+    /** Schémas compilés, par identifiant de {@code form_schema}. */
+    private final Map<UUID, JsonSchema> compiledSchemas = new ConcurrentHashMap<>();
 
     private static SchemaValidatorsConfig strictConfig() {
         SchemaValidatorsConfig config = new SchemaValidatorsConfig();
@@ -76,13 +80,31 @@ public class FormSchemaValidationService {
      * conformes. Utile pour un rendu d'erreurs champ par champ côté client.
      */
     public List<String> validateAndCollect(FormSchema formSchema, Map<String, Object> formData) {
-        JsonSchema schema = compile(requireSchema(formSchema), formSchema);
+        JsonSchema schema = compiledSchema(formSchema);
         JsonNode dataNode = JSON.valueToTree(formData == null ? Map.of() : formData);
         Set<ValidationMessage> errors = schema.validate(dataNode);
         return errors.stream()
                 .map(FormSchemaValidationService::describe)
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * Compile le schéma, avec mémoïsation par identifiant de {@code form_schema}.
+     * <p>
+     * La mémoïsation est sûre parce que ces lignes sont <strong>immuables</strong> : une
+     * version publiée référence un schéma figé (déclencheur {@code trg_immutable}, V13) et
+     * le compte applicatif ne détient pas le droit {@code UPDATE} sur {@code form_schema}
+     * (V13). Le cache est borné par le nombre de schémas du référentiel, faible par nature ;
+     * un schéma non persisté (identifiant nul) est compilé à la volée sans être mémoïsé.
+     */
+    private JsonSchema compiledSchema(FormSchema formSchema) {
+        JsonNode schemaNode = requireSchema(formSchema);
+        UUID id = formSchema.getId();
+        if (id == null) {
+            return compile(schemaNode, formSchema);
+        }
+        return compiledSchemas.computeIfAbsent(id, ignored -> compile(schemaNode, formSchema));
     }
 
     private JsonNode requireSchema(FormSchema formSchema) {

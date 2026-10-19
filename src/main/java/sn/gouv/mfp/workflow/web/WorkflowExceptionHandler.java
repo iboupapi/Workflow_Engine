@@ -1,11 +1,13 @@
 package sn.gouv.mfp.workflow.web;
 
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
 import sn.gouv.mfp.workflow.exception.InvalidEntryPointException;
 import sn.gouv.mfp.workflow.exception.MissingRequiredDataException;
 import sn.gouv.mfp.workflow.exception.WorkflowConflictException;
@@ -48,6 +50,18 @@ public class WorkflowExceptionHandler {
         return refuse(HttpStatus.BAD_REQUEST, e);
     }
 
+    /**
+     * Saisie non conforme au formulaire publié (FRM-03) : le refus porte, en plus du message,
+     * les écarts constatés (emplacement puis message) pour guider la correction côté usager.
+     */
+    @ExceptionHandler(FormSchemaValidationException.class)
+    public ResponseEntity<FormErrorBody> invalidForm(FormSchemaValidationException e) {
+        log.info("Refus 400 : {} ({})", e.getMessage(), e.getViolations());
+        return ResponseEntity.badRequest()
+                .body(new FormErrorBody(
+                        e.getClass().getSimpleName(), e.getMessage(), e.getViolations()));
+    }
+
     private ResponseEntity<ErrorBody> refuse(HttpStatus status, RuntimeException e) {
         log.info("Refus {} : {}", status.value(), e.getMessage());
         return ResponseEntity.status(status)
@@ -56,5 +70,9 @@ public class WorkflowExceptionHandler {
 
     /** Corps d'erreur stable : code d'exception et message explicite, sans détail interne. */
     public record ErrorBody(String code, String message) {
+    }
+
+    /** Corps d'erreur d'un formulaire invalide : écarts de validation en clair (FRM-03, FRM-06). */
+    public record FormErrorBody(String code, String message, List<String> violations) {
     }
 }

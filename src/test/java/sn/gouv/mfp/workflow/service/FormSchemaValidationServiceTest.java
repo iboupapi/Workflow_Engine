@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import sn.gouv.mfp.workflow.domain.request.FormSchema;
 import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
@@ -170,6 +171,16 @@ class FormSchemaValidationServiceTest {
         assertThatThrownBy(() -> service.validate(null, Map.of()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Aucun schéma");
+    }
+
+    @Test
+    void cachedSchema_shouldKeepValidatingTheSameWay() {
+        FormSchema persisted = schema(FORM);
+        persisted.setId(UUID.randomUUID());
+
+        assertThat(service.validateAndCollect(persisted, validData())).isEmpty();
+        assertThat(service.validateAndCollect(persisted, dataWith("age", 12)))
+                .anyMatch(violation -> violation.contains("age"));
     }
 
     private List<String> violationsOf(Map<String, Object> data) {
