@@ -62,6 +62,8 @@ class WorkflowHistoryImmutabilityTest {
                 .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
         assertThat(privilegesOf("request_type_version"))
                 .containsExactlyInAnyOrder("INSERT", "SELECT");
+        assertThat(privilegesOf("request_submission"))
+                .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
     }
 
     @Test
