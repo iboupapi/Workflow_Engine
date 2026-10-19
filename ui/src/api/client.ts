@@ -14,12 +14,15 @@ export function setToken(token: string | null): void {
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
+  /** Ecarts de validation du formulaire (FRM-03), vides pour les autres refus. */
+  readonly violations: string[]
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, violations: string[] = []) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.violations = violations
   }
 }
 
@@ -47,14 +50,21 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!response.ok) {
     let code = `HTTP_${response.status}`
     let message = response.statusText
+    let violations: string[] = []
     try {
-      const parsed = (await response.json()) as { code?: string; message?: string }
+      const parsed = (await response.json()) as {
+        code?: string
+        message?: string
+        violations?: string[]
+      }
       code = parsed.code ?? code
       message = parsed.message ?? message
+      violations = parsed.violations ?? violations
     } catch {
       // corps non JSON : on garde le message HTTP
     }
-    throw new ApiError(response.status, code, message)
+    // HTTP/2 ne fournit pas de statusText : le refus doit rester lisible.
+    throw new ApiError(response.status, code, message || code, violations)
   }
   if (response.status === 204) {
     return undefined as T

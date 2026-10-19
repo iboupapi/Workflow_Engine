@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ApiError } from '../api/client'
 import { TONES, type Tone } from '../lib/status'
 
 export function Panel({
@@ -34,9 +35,19 @@ export function ErrorNote({ error }: { error: unknown }) {
     return null
   }
   const message = error instanceof Error ? error.message : String(error)
+  const violations = error instanceof ApiError ? error.violations : []
   return (
-    <p className="rounded-md border border-mfp-red bg-mfp-red/10 px-3 py-2 text-sm text-mfp-red">
-      {message}
-    </p>
+    <div className="rounded-md border border-mfp-red bg-mfp-red/10 px-3 py-2 text-sm text-mfp-red">
+      <p>{message}</p>
+      {violations.length > 0 && (
+        <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs">
+          {violations.map((violation) => (
+            <li key={violation} className="font-mono">
+              {violation}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

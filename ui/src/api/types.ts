@@ -55,3 +55,93 @@ export interface DefinitionView
 export type SpringPage<T> = Omit<Present<Schemas['PageWorkflowInstanceResponse']>, 'content'> & {
   content: T[]
 }
+
+/*
+ * Phase 3 — demandes d'usagers (REQ-01, REQ-02, REQ-03).
+ *
+ * Ces contrats ne figurent pas encore dans schema.d.ts : ils sont recopies a la main
+ * depuis les records exposes par RequestSubmissionService. A regenerer avec
+ * `npm run api:generate` (backend demarre) pour supprimer cette duplication.
+ */
+
+/** Type de demande propose a l'usager (referentiel publie). */
+export interface RequestTypeView {
+  id: string
+  key: string
+  label: string
+  category: string | null
+}
+
+/** Formulaire de la version publiee en vigueur : JSON Schema 2020-12 + UI Schema. */
+export interface RequestFormView {
+  typeKey: string
+  label: string
+  version: number
+  schema: JsonSchema
+  uiSchema: UiSchema | null
+}
+
+/** Statut d'une saisie d'usager. */
+export type SubmissionStatus = 'DRAFT' | 'SUBMITTED'
+
+/** Saisie d'usager : brouillon reprenable ou demande soumise, liee a son dossier. */
+export interface SubmissionView {
+  id: string
+  typeKey: string
+  version: number
+  status: SubmissionStatus
+  instanceId: string | null
+  createdAt: string
+  submittedAt: string | null
+}
+
+/** Corps des endpoints de saisie : type vise et champs du formulaire. */
+export interface FormDataRequest {
+  typeKey: string
+  formData: Record<string, unknown>
+}
+
+/** Brouillon complet : la saisie enregistree, pour reprendre le formulaire. */
+export interface DraftView {
+  id: string
+  typeKey: string
+  version: number
+  formData: Record<string, unknown>
+  createdAt: string
+}
+
+/** Sous-ensemble du JSON Schema utilise par le rendu (les autres mots-cles sont ignores). */
+export interface JsonSchema {
+  type?: string
+  title?: string
+  description?: string
+  properties?: Record<string, JsonSchemaProperty>
+  required?: string[]
+}
+
+export interface JsonSchemaProperty {
+  type?: string
+  title?: string
+  description?: string
+  format?: string
+  enum?: unknown[]
+  items?: JsonSchemaProperty
+  minimum?: number
+  maximum?: number
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  default?: unknown
+}
+
+/** UI Schema : presentation par champ, plus l'ordre souhaite des champs. */
+export interface UiSchema {
+  'ui:order'?: string[]
+  [field: string]: UiSchemaField | string[] | undefined
+}
+
+export interface UiSchemaField {
+  label?: string
+  help?: string
+  widget?: string
+}

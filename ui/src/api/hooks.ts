@@ -4,10 +4,15 @@ import type {
   ActionOption,
   DefinitionView,
   DevToken,
+  DraftView,
+  FormDataRequest,
   HistoryEntry,
   InstanceView,
+  RequestFormView,
+  RequestTypeView,
   SpringPage,
   StartWorkflowRequest,
+  SubmissionView,
   TransitionRequest,
   WorkflowInstance,
 } from './types'
@@ -79,6 +84,81 @@ export function useStartWorkflow(definitionKey: string) {
       apiPost<WorkflowInstance>(`/api/workflows/${definitionKey}/start`, input),
     onSuccess: () => {
       invalidate(queryClient)
+    },
+  })
+}
+
+/* --------------------------------------------------------------------------------------
+ * Phase 3 — demandes d'usagers (REQ-01, REQ-03).
+ * ------------------------------------------------------------------------------------ */
+
+/** Catalogue des types de demande publies. */
+export function useRequestTypes(enabled = true) {
+  return useQuery({
+    queryKey: ['request-types'],
+    enabled,
+    queryFn: () => apiGet<RequestTypeView[]>('/api/request-types'),
+  })
+}
+
+/** Formulaire de la version publiee en vigueur d'un type de demande. */
+export function useRequestForm(typeKey: string | null) {
+  return useQuery({
+    queryKey: ['request-form', typeKey],
+    enabled: typeKey !== null && typeKey.length > 0,
+    queryFn: () => apiGet<RequestFormView>(`/api/request-types/${typeKey}/form`),
+  })
+}
+
+/** Brouillons du demandeur authentifie. */
+export function useDrafts(enabled = true) {
+  return useQuery({
+    queryKey: ['request-drafts'],
+    enabled,
+    queryFn: () => apiGet<SubmissionView[]>('/api/requests/drafts'),
+  })
+}
+
+/** Brouillon complet (saisie enregistree) pour reprendre le formulaire. */
+export function useDraft(draftId: string | null) {
+  return useQuery({
+    queryKey: ['request-draft', draftId],
+    enabled: draftId !== null,
+    queryFn: () => apiGet<DraftView>(`/api/requests/drafts/${draftId}`),
+  })
+}
+
+export function useSubmitRequest() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: FormDataRequest) =>
+      apiPost<SubmissionView>('/api/requests/submit', input),
+    onSuccess: () => {
+      invalidate(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['request-drafts'] })
+    },
+  })
+}
+
+export function useSaveDraft() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: FormDataRequest) =>
+      apiPost<SubmissionView>('/api/requests/drafts', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['request-drafts'] })
+    },
+  })
+}
+
+export function useSubmitDraft() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (draftId: string) =>
+      apiPost<SubmissionView>(`/api/requests/drafts/${draftId}/submit`, {}),
+    onSuccess: () => {
+      invalidate(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['request-drafts'] })
     },
   })
 }

@@ -1,29 +1,42 @@
-import { GitBranch, Inbox, PlusCircle } from 'lucide-react'
-import { useEffect, useState, type ComponentType } from 'react'
+import { FileText, GitBranch, Inbox, PlusCircle } from 'lucide-react'
+import { useCallback, useState, type ComponentType } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { setToken } from './api/client'
 import type { DevToken } from './api/types'
 import { CircuitView } from './components/CircuitView'
 import { DossiersView } from './components/DossiersView'
 import { NewRequestView } from './components/NewRequestView'
+import { RequestsView } from './components/RequestsView'
 import { RoleBar } from './components/RoleBar'
 
 const CIRCUIT = 'E_SERVICE_DEMANDE'
 
-type Tab = 'dossiers' | 'circuit' | 'nouvelle'
+type Tab = 'demandes' | 'dossiers' | 'circuit' | 'nouvelle'
 
 const TABS: { id: Tab; label: string; Icon: ComponentType<{ className?: string }> }[] = [
+  { id: 'demandes', label: 'Demandes', Icon: FileText },
   { id: 'dossiers', label: 'Dossiers', Icon: Inbox },
   { id: 'circuit', label: 'Circuit', Icon: GitBranch },
-  { id: 'nouvelle', label: 'Nouvelle demande', Icon: PlusCircle },
+  { id: 'nouvelle', label: 'Nouvelle demande (directe)', Icon: PlusCircle },
 ]
 
 export default function App() {
+  const queryClient = useQueryClient()
   const [selectedToken, setSelectedToken] = useState<DevToken | null>(null)
-  const [tab, setTab] = useState<Tab>('dossiers')
+  const [tab, setTab] = useState<Tab>('demandes')
 
-  useEffect(() => {
-    setToken(selectedToken?.token ?? null)
-  }, [selectedToken])
+  /*
+   * Le jeton est pose AVANT le rendu qui declenche les requetes : un effet
+   * s'executerait apres elles et la premiere salve partirait sans Authorization (401).
+   */
+  const selectToken = useCallback(
+    (token: DevToken | null) => {
+      setToken(token?.token ?? null)
+      setSelectedToken(token)
+      void queryClient.clear()
+    },
+    [queryClient],
+  )
 
   return (
     <div className="flex min-h-screen flex-col border-t-4 border-mfp-green bg-canvas text-ink">
@@ -40,7 +53,7 @@ export default function App() {
         </span>
       </header>
 
-      <RoleBar active={selectedToken} onSelect={setSelectedToken} />
+      <RoleBar active={selectedToken} onSelect={selectToken} />
 
       <nav className="flex gap-1 border-b border-line bg-surface px-6">
         {TABS.map(({ id, label, Icon }) => (
@@ -61,6 +74,12 @@ export default function App() {
       </nav>
 
       <main className="flex-1 p-6">
+        {tab === 'demandes' && (
+          <RequestsView
+            authenticated={selectedToken !== null}
+            onOpenInstance={() => setTab('dossiers')}
+          />
+        )}
         {tab === 'dossiers' && <DossiersView authenticated={selectedToken !== null} />}
         {tab === 'circuit' && (
           <CircuitView definitionKey={CIRCUIT} authenticated={selectedToken !== null} />
