@@ -15,4 +15,7 @@ public interface RequestTypeRepository extends JpaRepository<RequestType, UUID> 
 
     /** Types de demande proposables à l'usager (référentiel publié). */
     List<RequestType> findByStatusOrderByLabelAsc(RequestTypeStatus status);
+
+    /** Référentiel complet, tous statuts : vue d'administration. */
+    List<RequestType> findAllByOrderByLabelAsc();
 }

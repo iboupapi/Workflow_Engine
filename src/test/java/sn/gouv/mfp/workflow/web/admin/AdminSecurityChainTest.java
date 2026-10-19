@@ -1,9 +1,11 @@
 package sn.gouv.mfp.workflow.web.admin;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,6 +88,63 @@ class AdminSecurityChainTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"initiatorId\":\"agent-001\"}"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publishAnEserviceWithNamedAdminToken_shouldOpenItInTheUserCatalog() throws Exception {
+        String token = JwtTestTokens.signed("admin-01", List.of());
+
+        // 1. Le circuit de traitement existe (import à chaud) : rien n'est censé être pré-configuré.
+        mockMvc.perform(post("/api/admin/workflows/import")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType("application/x-yaml")
+                        .content(minimalYaml()))
+                .andExpect(status().isCreated());
+
+        // 2. Type de demande en brouillon.
+        String typeId = JsonPath.read(postAdmin(token, "/api/admin/request-types", """
+                {"typeKey": "CHAIN_MEDAILLE", "label": "Demande de médaille",
+                 "category": "Distinctions"}"""), "$.id");
+
+        // 3. Formulaire : un champ de saisie, contrôle avant enregistrement (FRM-01).
+        String schemaId = JsonPath.read(postAdmin(token, "/api/admin/form-schemas", """
+                {"schemaJson": {"type": "object",
+                  "properties": {"anneeDistinction": {"type": "string", "title": "Année de distinction"}},
+                  "required": ["anneeDistinction"]},
+                 "uiSchema": {"ui:order": ["anneeDistinction"]}}"""), "$.id");
+
+        // 4. Publication : le type devient proposable, en version 1.
+        mockMvc.perform(post("/api/admin/request-type-versions/publish")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestTypeId\": \"" + typeId + "\", \"formSchemaId\": \""
+                                + schemaId + "\", \"workflowDefinitionKey\": \"CHAIN_OK\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.version").value(1));
+
+        // 5. Le catalogue usager le propose immédiatement...
+        mockMvc.perform(get("/api/request-types").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.key=='CHAIN_MEDAILLE')]").isNotEmpty());
+
+        // ...avec le formulaire publié servi tel quel.
+        mockMvc.perform(get("/api/request-types/CHAIN_MEDAILLE/form")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.schema.properties.anneeDistinction.type").value("string"));
+    }
+
+    private String postAdmin(String token, String path, String body) throws Exception {
+        return mockMvc.perform(post(path)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
     }
 
     private String minimalYaml() {

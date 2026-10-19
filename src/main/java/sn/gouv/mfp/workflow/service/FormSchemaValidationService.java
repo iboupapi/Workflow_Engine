@@ -7,6 +7,7 @@ import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SchemaValidatorsConfig;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 import sn.gouv.mfp.workflow.domain.request.FormSchema;
 import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
+import sn.gouv.mfp.workflow.exception.WorkflowValidationException;
 
 /**
  * Validation côté serveur des données de formulaire (FRM-03) contre le JSON Schema 2020-12
@@ -41,6 +43,13 @@ public class FormSchemaValidationService {
             JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
     private static final SchemaValidatorsConfig STRICT_CONFIG = strictConfig();
+
+    /**
+     * Formats JSON Schema désignant un dépôt de fichier (FRM-05), alignés sur la liste du
+     * rendu de formulaire : ces champs ne sont jamais des données de saisie.
+     */
+    private static final Set<String> FILE_FORMATS =
+            Set.of("binary", "file", "attachment", "data-url");
 
     /** Schémas compilés, par identifiant de {@code form_schema}. */
     private final Map<UUID, JsonSchema> compiledSchemas = new ConcurrentHashMap<>();
@@ -87,6 +96,60 @@ public class FormSchemaValidationService {
                 .map(FormSchemaValidationService::describe)
                 .sorted()
                 .toList();
+    }
+
+    /**
+     * Contrôle de PUBLICATION (administration, FRM-01) : le schéma proposé doit être un JSON
+     * Schema 2020-12 exploitable comme formulaire, c'est-à-dire compilable par le validateur
+     * de soumission ET porteur de champs saisissables.
+     * <p>
+     * Ces refus sont volontairement posés à la publication plutôt qu'à la soumission : un
+     * schéma inutilisable publié produirait une demande que <em>personne</em> ne pourrait
+     * déposer, et le défaut ne se verrait qu'à la première saisie d'un usager.
+     *
+     * @param jsonSchema schéma proposé par l'administration
+     * @throws WorkflowValidationException schéma vide, illisible, non objet, sans champ, ou
+     *                                     exigeant un dépôt de fichier (FRM-05 : un fichier ne
+     *                                     peut pas être une donnée du formulaire, l'exiger
+     *                                     rendrait toute soumission refusée)
+     */
+    public void validateDefinition(Map<String, Object> jsonSchema) {
+        if (jsonSchema == null || jsonSchema.isEmpty()) {
+            throw new WorkflowValidationException(
+                    "Aucun schéma de formulaire : un formulaire sans schéma ne peut pas être publié.");
+        }
+        FormSchema candidate = new FormSchema();
+        candidate.setJsonSchema(jsonSchema);
+        JsonNode node = requireSchema(candidate);
+        try {
+            compile(node, candidate);
+        } catch (IllegalStateException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new WorkflowValidationException(
+                    "JSON Schema invalide : " + cause.getMessage());
+        }
+        JsonNode properties = node.get("properties");
+        if (!"object".equals(node.path("type").asText())
+                || properties == null
+                || !properties.isObject()
+                || properties.isEmpty()) {
+            throw new WorkflowValidationException(
+                    "Un formulaire doit décrire un objet (`type: object`) portant au moins un "
+                            + "champ (`properties`).");
+        }
+        List<String> requiredNames = new ArrayList<>();
+        node.path("required").forEach(name -> requiredNames.add(name.asText()));
+        properties.fields().forEachRemaining(field -> {
+            // `asText("")` et non `asText(null)` : un ensemble immuable refuse `contains(null)`.
+            if (FILE_FORMATS.contains(field.getValue().path("format").asText(""))
+                    && requiredNames.contains(field.getKey())) {
+                throw new WorkflowValidationException(
+                        "Le champ de pièce jointe '" + field.getKey() + "' est déclaré obligatoire "
+                                + "(`required`) : un fichier n'est pas une donnée de formulaire, la "
+                                + "soumission serait refusée (FRM-05). Le caractère obligatoire d'un "
+                                + "dépôt se contrôle dans le formulaire, pas dans le schéma.");
+            }
+        });
     }
 
     /**

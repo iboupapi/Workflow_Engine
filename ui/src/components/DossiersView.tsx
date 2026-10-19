@@ -11,11 +11,33 @@ const VIEWS: { id: InstanceView; label: string; hint: string }[] = [
   { id: 'ALL', label: 'ALL', hint: 'Vue complète — réservée aux administrateurs / auditeurs' },
 ]
 
-/** Liste des dossiers (bannettes MINE / INBOX / ALL) et detail du dossier selectionne. */
-export function DossiersView({ authenticated }: { authenticated: boolean }) {
-  const [view, setView] = useState<InstanceView>('MINE')
-  const [selected, setSelected] = useState<string | null>(null)
+/**
+ * Liste des dossiers (bannettes MINE / INBOX / ALL) et detail du dossier selectionne.
+ *
+ * `views` restreint les bannettes offertes : l'espace citoyen ne montre que les dossiers
+ * dont l'usager est l'initiateur, les autres bannettes n'ayant de sens que pour
+ * l'instruction. `selectedId` permet d'ouvrir directement un dossier (apres soumission).
+ */
+export function DossiersView({
+  authenticated,
+  views: available = ['MINE', 'INBOX', 'ALL'],
+  selectedId = null,
+}: {
+  authenticated: boolean
+  views?: InstanceView[]
+  selectedId?: string | null
+}) {
+  const views = VIEWS.filter((candidate) => available.includes(candidate.id))
+  const [wanted, setWanted] = useState<InstanceView | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  // Un changement d'espace peut retirer la bannette affichee (citoyen : MINE seul) : on
+  // retombe alors sur la premiere bannette offerte, sans effet de synchronisation.
+  const view: InstanceView =
+    wanted !== null && available.includes(wanted) ? wanted : (available[0] ?? 'MINE')
   const { data, isLoading, error } = useInstances(view, authenticated)
+  // Le dossier ouvert est celui choisi dans la liste, sinon celui designe par l'appelant :
+  // aucun effet n'est necessaire, la valeur derivee suffit.
+  const selected = picked ?? selectedId
 
   if (!authenticated) {
     return (
@@ -31,12 +53,12 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
         title="Dossiers"
         actions={
           <div className="flex gap-1">
-            {VIEWS.map((candidate) => (
+            {views.map((candidate) => (
               <button
                 key={candidate.id}
                 type="button"
                 title={candidate.hint}
-                onClick={() => setView(candidate.id)}
+                onClick={() => setWanted(candidate.id)}
                 className={`rounded-md border px-2 py-1 text-xs ${
                   view === candidate.id
                     ? 'border-mfp-green bg-mfp-green/10 font-medium text-mfp-green'
@@ -56,7 +78,7 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
             <li key={instance.id}>
               <button
                 type="button"
-                onClick={() => setSelected(instance.id)}
+                onClick={() => setPicked(instance.id)}
                 className={`flex w-full flex-col gap-1 px-2 py-3 text-left hover:bg-surface-muted ${
                   selected === instance.id ? 'bg-mfp-green/5' : ''
                 }`}

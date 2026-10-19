@@ -17,4 +17,14 @@ public interface WorkflowDefinitionRepository extends JpaRepository<WorkflowDefi
     /** Dernière version persistée pour une clé fonctionnelle (0 si absente → Optional vide). */
     @Query("SELECT MAX(d.version) FROM WorkflowDefinition d WHERE d.key = :key")
     Optional<Integer> findMaxVersionByKey(@Param("key") String key);
+
+    /**
+     * Dernière version de CHAQUE clé fonctionnelle, triée par clé : ce que l'administration
+     * peut rattacher à un type de demande (les dossiers démarrent toujours sur la dernière
+     * version, comme {@code WorkflowDefinitionViewService}).
+     */
+    @Query("SELECT d FROM WorkflowDefinition d WHERE d.version = "
+            + "(SELECT MAX(x.version) FROM WorkflowDefinition x WHERE x.key = d.key) "
+            + "ORDER BY d.key")
+    List<WorkflowDefinition> findLatestVersionPerKey();
 }

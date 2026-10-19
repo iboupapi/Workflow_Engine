@@ -13,7 +13,7 @@ import type { AttachmentView, SubmissionView } from '../api/types'
 import { ATTACHMENT_LABELS } from '../lib/attachments'
 import { formFields, initialValues, toFormData, type FormField } from '../lib/formSchema'
 import { AttachmentList } from './AttachmentList'
-import { FormFieldInput } from './FormFieldInput'
+import { SchemaForm } from './SchemaForm'
 import { ErrorNote, Panel } from './ui'
 
 /**
@@ -203,25 +203,18 @@ export function DynamicRequestForm({
           </p>
 
           <form onSubmit={onSubmit} className="grid max-w-2xl gap-4">
-            {fields.length === 0 && (
-              <p className="text-sm text-ink-muted">Ce formulaire ne comporte aucun champ.</p>
-            )}
-
-            {fields.map((field) => (
-              <FormFieldInput
-                key={field.name}
-                field={field}
-                value={values[field.name]}
-                disabled={pending}
-                onChange={(value) => set(field.name, value)}
-                attachment={byField[field.name] ?? null}
-                uploading={uploadingField === field.name}
-                fileError={fileErrors[field.name] ?? null}
-                onFile={(file) => void onFile(field, file)}
-                onDownload={download.mutate}
-                downloading={download.isPending}
-              />
-            ))}
+            <SchemaForm
+              fields={fields}
+              values={values}
+              onChange={set}
+              disabled={pending}
+              attachmentOf={(name) => byField[name] ?? null}
+              uploadingField={uploadingField}
+              fileErrors={fileErrors}
+              onFile={(field, file) => void onFile(field, file)}
+              onDownload={download.mutate}
+              downloading={download.isPending}
+            />
 
             {notice && (
               <p className="rounded-md border border-mfp-green bg-mfp-green/10 px-3 py-2 text-sm text-mfp-green">

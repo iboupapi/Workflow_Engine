@@ -24,6 +24,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requests/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Soumettre une demande
+         * @description Valide la saisie contre le formulaire publié (400 avec le détail des écarts, sans rien enregistrer), en dérive les variables de décision selon la liaison déclarée, puis crée le dossier du circuit. Le demandeur est l'identité certifiée du jeton.
+         */
+        post: operations["submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/submissions/{submissionId}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les pièces jointes d'une demande
+         * @description Brouillon : son auteur seul. Demande soumise : mêmes règles de visibilité que le dossier.
+         */
+        get: operations["listAttachments"];
+        put?: never;
+        /**
+         * Déposer une pièce jointe
+         * @description FRM-05 : type MIME réel déduit du contenu (liste de types autorisés), taille maximale, empreinte SHA-256 et analyse antivirus AVANT mise à disposition. Un contenu refusé n'est jamais conservé. Le dépôt se fait sur un brouillon, par son auteur.
+         */
+        post: operations["uploadAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister ses brouillons
+         * @description Brouillons du demandeur authentifié, du plus récent au plus ancien.
+         */
+        get: operations["drafts"];
+        put?: never;
+        /**
+         * Enregistrer un brouillon
+         * @description Conserve une saisie incomplète, sans dossier : elle est reprenable et modifiable par son auteur. Aucune validation de formulaire n'est faite à ce stade.
+         */
+        post: operations["saveDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/drafts/{draftId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Soumettre un brouillon
+         * @description Valide la saisie enregistrée puis crée le dossier ; le brouillon devient la demande définitive. Réservé à son auteur, une seule fois.
+         */
+        post: operations["submitDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/instances/{instanceId}/transition": {
         parameters: {
             query?: never;
@@ -64,6 +152,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/request-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister tous les types de demande
+         * @description Référentiel COMPLET (DRAFT, PUBLISHED, RETIRED), dernière version comprise : c'est le tableau de bord de l'administration, là où le catalogue usager ne montre que les types publiés.
+         */
+        get: operations["types"];
+        put?: never;
+        /**
+         * Créer un type de demande
+         * @description Crée le référentiel en brouillon : le type n'est proposé à l'usager qu'une fois une version publiée. Aucune validation en écriture SQL.
+         */
+        post: operations["createType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/request-type-versions/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publier une version de type de demande
+         * @description Assemble le type, le formulaire et le circuit, contrôle la liaison des champs (REQ-02) puis publie une version immuable. Le type devient immédiatement proposable dans le catalogue ; republier crée la version suivante.
+         */
+        post: operations["publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/form-schemas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enregistrer un schéma de formulaire
+         * @description Contrôle le JSON Schema 2020-12 (compilable, objet racine portant des champs) puis le conserve. L'identifiant renvoyé est celui à rattacher à la publication.
+         */
+        post: operations["createFormSchema"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows/{definitionKey}": {
         parameters: {
             query?: never;
@@ -76,6 +228,86 @@ export interface paths {
          * @description Carte statique de la dernière version du circuit : étapes (nature, rôles responsables, données obligatoires), transitions (action, cible, condition, marqueur de traitement), points d'entrée et variables. Alimente le visualiseur de la console ; aucune donnée de dossier.
          */
         get: operations["getDefinition"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consulter un brouillon
+         * @description Saisie complète enregistrée, pour la reprendre dans le formulaire. Réservé à son auteur.
+         */
+        get: operations["draft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Télécharger une pièce jointe
+         * @description Le contenu n'est servi que si l'analyse antivirus est favorable, et selon les règles de visibilité du dossier ; l'empreinte SHA-256 est rappelée en en-tête.
+         */
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/request-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les types de demande proposés
+         * @description Référentiel publié, trié par libellé : ce que l'usager peut demander.
+         */
+        get: operations["types_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/request-types/{typeKey}/form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Formulaire d'un type de demande
+         * @description JSON Schema 2020-12 et UI Schema de la version publiée en vigueur. Ces données alimentent la présentation du formulaire ; la validation serveur reste celle de la soumission (FRM-03).
+         */
+        get: operations["form"];
         put?: never;
         post?: never;
         delete?: never;
@@ -144,6 +376,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/instances/{instanceId}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les pièces jointes d'un dossier
+         * @description Fiche dossier : mêmes règles de visibilité que le dossier lui-même. Un dossier ouvert par le moteur sans demande rattachée n'a aucune pièce jointe (liste vide).
+         */
+        get: operations["listInstanceAttachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/instances/{instanceId}/actions": {
         parameters: {
             query?: never;
@@ -196,6 +448,46 @@ export interface paths {
          * @description Renvoie un JWT signé pour le rôle moteur demandé (ex. CITOYEN, CHEF_DIVISION, AGENT_TRAITEMENT, DLEC, DGFP).
          */
         get: operations["token"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lister les circuits déployés
+         * @description Dernière version de chaque clé de circuit : ce qui peut être rattaché à un type de demande.
+         */
+        get: operations["workflows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/request-types/{requestTypeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Détail d'un type de demande
+         * @description Version en vigueur, schéma de formulaire et liaison de champs : de quoi rouvrir l'éditeur sur un E-Service existant.
+         */
+        get: operations["type"];
         put?: never;
         post?: never;
         delete?: never;
@@ -273,6 +565,55 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @description Saisie d'une demande d'usager. */
+        FormDataRequest: {
+            /**
+             * @description Clé métier du type de demande.
+             * @example CERTIFICAT_TRAVAIL
+             */
+            typeKey?: string;
+            /**
+             * @description Champs saisis, validés contre le JSON Schema publié du type.
+             * @example {
+             *       "nom": "Awa Diop",
+             *       "motif": "Promotion"
+             *     }
+             */
+            formData?: {
+                [key: string]: unknown;
+            };
+        };
+        SubmissionView: {
+            /** Format: uuid */
+            id?: string;
+            typeKey?: string;
+            /** Format: int32 */
+            version?: number;
+            /** @enum {string} */
+            status?: "DRAFT" | "SUBMITTED";
+            /** Format: uuid */
+            instanceId?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            submittedAt?: string;
+        };
+        AttachmentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            submissionId?: string;
+            fieldPath?: string;
+            filename?: string;
+            mimeType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            /** @enum {string} */
+            scanStatus?: "PENDING" | "CLEAN" | "INFECTED" | "ERROR";
+            /** Format: date-time */
+            createdAt?: string;
+        };
         /** @description Demande d'exécution d'une transition sur un dossier. */
         TransitionRequest: {
             /**
@@ -320,6 +661,101 @@ export interface components {
              */
             transitionCount?: number;
         };
+        /** @description Nouveau type de demande proposé aux usagers. */
+        CreateRequestTypeRequest: {
+            /**
+             * @description Clé métier, unique et stable (majuscules, chiffres, soulignés ; utilisée dans les URL).
+             * @example CONGE_MATERNITE
+             */
+            typeKey?: string;
+            /**
+             * @description Libellé présenté à l'usager.
+             * @example Demande de congé maternité
+             */
+            label?: string;
+            /**
+             * @description Catégorie de rattachement (facultative).
+             * @example Congés & absences
+             */
+            category?: string;
+        };
+        AdminRequestTypeView: {
+            /** Format: uuid */
+            id?: string;
+            key?: string;
+            label?: string;
+            category?: string;
+            status?: string;
+            /** Format: int32 */
+            version?: number;
+            /** Format: date-time */
+            publishedAt?: string;
+            definitionKey?: string;
+        };
+        /** @description Publication d'une version de type de demande. */
+        PublishRequestTypeVersionRequest: {
+            /**
+             * Format: uuid
+             * @description Type de demande visé.
+             */
+            requestTypeId?: string;
+            /**
+             * Format: uuid
+             * @description Schéma de formulaire de cette version.
+             */
+            formSchemaId?: string;
+            /**
+             * @description Clé du circuit qui traitera les demandes.
+             * @example E_SERVICE_DEMANDE
+             */
+            workflowDefinitionKey?: string;
+            /**
+             * @description Liaison des champs du formulaire vers les variables de décision du circuit (REQ-02), facultative.
+             * @example {
+             *       "typeActe": "natureActe"
+             *     }
+             */
+            fieldMapping?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description Schéma de formulaire d'un type de demande. */
+        CreateFormSchemaRequest: {
+            /**
+             * @description JSON Schema 2020-12 du formulaire (objet racine avec des champs).
+             * @example {
+             *       "type": "object",
+             *       "properties": {
+             *         "dateDebut": {
+             *           "type": "string",
+             *           "format": "date"
+             *         }
+             *       },
+             *       "required": [
+             *         "dateDebut"
+             *       ]
+             *     }
+             */
+            schemaJson?: {
+                [key: string]: unknown;
+            };
+            /** @description UI Schema : libellés, aides et ordre des champs (facultatif). */
+            uiSchema?: {
+                [key: string]: unknown;
+            };
+        };
+        FormSchemaView: {
+            /** Format: uuid */
+            id?: string;
+            jsonSchema?: {
+                [key: string]: unknown;
+            };
+            uiSchema?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt?: string;
+        };
         DefinitionView: {
             key?: string;
             /** Format: int32 */
@@ -357,6 +793,37 @@ export interface components {
             key?: string;
             type?: string;
             required?: boolean;
+        };
+        DraftView: {
+            /** Format: uuid */
+            id?: string;
+            typeKey?: string;
+            /** Format: int32 */
+            version?: number;
+            formData?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        TypeView: {
+            /** Format: uuid */
+            id?: string;
+            key?: string;
+            label?: string;
+            category?: string;
+        };
+        FormView: {
+            typeKey?: string;
+            label?: string;
+            /** Format: int32 */
+            version?: number;
+            schema?: {
+                [key: string]: unknown;
+            };
+            uiSchema?: {
+                [key: string]: unknown;
+            };
         };
         Pageable: {
             /** Format: int32 */
@@ -422,6 +889,34 @@ export interface components {
             token?: string;
             /** Format: date-time */
             expiresAt?: string;
+        };
+        DeployedWorkflowView: {
+            key?: string;
+            name?: string;
+            /** Format: int32 */
+            version?: number;
+        };
+        AdminRequestTypeDetailView: {
+            /** Format: uuid */
+            id?: string;
+            key?: string;
+            label?: string;
+            category?: string;
+            status?: string;
+            /** Format: int32 */
+            version?: number;
+            /** Format: date-time */
+            publishedAt?: string;
+            definitionKey?: string;
+            fieldMapping?: {
+                [key: string]: unknown;
+            };
+            jsonSchema?: {
+                [key: string]: unknown;
+            };
+            uiSchema?: {
+                [key: string]: unknown;
+            };
         };
     };
     responses: never;
@@ -494,6 +989,318 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["WorkflowInstanceResponse"];
+                };
+            };
+        };
+    };
+    submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Demande soumise et dossier créé. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Saisie non conforme au formulaire publié. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Type inconnu, non publié ou sans version publiée. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Plafond de dossiers actifs atteint. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+        };
+    };
+    listAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant de la demande. */
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pièces jointes visibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+            /** @description Demande inconnue ou non visible. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+        };
+    };
+    uploadAttachment: {
+        parameters: {
+            query: {
+                /** @description Champ du formulaire que la pièce renseigne. */
+                fieldPath: string;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant de la demande (brouillon). */
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Contenu déposé.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pièce jointe déposée et analysée. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+            /** @description Champ inconnu, fichier vide ou contenu refusé par l'analyse antivirus. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+            /** @description Demande inconnue ou non visible. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+            /** @description Pièce jointe trop volumineuse. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+            /** @description Type de fichier non autorisé. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"];
+                };
+            };
+        };
+    };
+    drafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brouillons du demandeur. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"][];
+                };
+            };
+        };
+    };
+    saveDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Brouillon enregistré. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Type inconnu, non publié ou sans version publiée. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+        };
+    };
+    submitDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du brouillon. */
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brouillon soumis, dossier créé. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Saisie non conforme au formulaire publié. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Brouillon d'un autre demandeur. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Brouillon inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubmissionView"];
                 };
             };
         };
@@ -623,6 +1430,215 @@ export interface operations {
             };
         };
     };
+    types: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Référentiel complet. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"][];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"][];
+                };
+            };
+        };
+    };
+    createType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRequestTypeRequest"];
+            };
+        };
+        responses: {
+            /** @description Type créé en brouillon. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Clé ou libellé invalide. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Clé déjà utilisée par un autre type. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+        };
+    };
+    publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequestTypeVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Version publiée. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Liaison de champs incohérente ou clé de circuit absente. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+            /** @description Type, schéma de formulaire ou circuit inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeView"];
+                };
+            };
+        };
+    };
+    createFormSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFormSchemaRequest"];
+            };
+        };
+        responses: {
+            /** @description Schéma enregistré. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormSchemaView"];
+                };
+            };
+            /** @description Schéma vide, invalide ou inexploitable. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormSchemaView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormSchemaView"];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormSchemaView"];
+                };
+            };
+        };
+    };
     getDefinition: {
         parameters: {
             query?: never;
@@ -663,6 +1679,188 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["DefinitionView"];
+                };
+            };
+        };
+    };
+    draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du brouillon. */
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brouillon et sa saisie. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DraftView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DraftView"];
+                };
+            };
+            /** @description Brouillon d'un autre demandeur. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DraftView"];
+                };
+            };
+            /** @description Brouillon inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DraftView"];
+                };
+            };
+            /** @description La saisie a déjà été soumise. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DraftView"];
+                };
+            };
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant de la pièce jointe. */
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contenu de la pièce jointe. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Pièce jointe inconnue ou dossier non visible. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Analyse antivirus non favorable : contenu non servi. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    types_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue publié. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TypeView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TypeView"][];
+                };
+            };
+        };
+    };
+    form: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Clé métier du type de demande.
+                 * @example CERTIFICAT_TRAVAIL
+                 */
+                typeKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Formulaire de la version en vigueur. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormView"];
+                };
+            };
+            /** @description Type inconnu, non publié ou sans version publiée. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["FormView"];
                 };
             };
         };
@@ -802,6 +2000,47 @@ export interface operations {
             };
         };
     };
+    listInstanceAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du dossier. */
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pièces jointes du dossier. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+            /** @description Dossier inconnu ou non visible. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachmentView"][];
+                };
+            };
+        };
+    };
     possibleActions: {
         parameters: {
             query?: never;
@@ -922,6 +2161,94 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["DevToken"];
+                };
+            };
+        };
+    };
+    workflows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Circuits disponibles. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DeployedWorkflowView"][];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DeployedWorkflowView"][];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DeployedWorkflowView"][];
+                };
+            };
+        };
+    };
+    type: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant du type de demande. */
+                requestTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Type et sa version en vigueur. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeDetailView"];
+                };
+            };
+            /** @description Non authentifié. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeDetailView"];
+                };
+            };
+            /** @description Administrateur nommé requis. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeDetailView"];
+                };
+            };
+            /** @description Type inconnu. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminRequestTypeDetailView"];
                 };
             };
         };

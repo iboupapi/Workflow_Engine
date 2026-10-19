@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import sn.gouv.mfp.workflow.domain.request.FormSchema;
 import sn.gouv.mfp.workflow.exception.FormSchemaValidationException;
+import sn.gouv.mfp.workflow.exception.WorkflowValidationException;
 
 /**
  * FRM-03 — validation côté serveur systématique : obligatoire, bornes, formats, masque,
@@ -191,6 +192,69 @@ class FormSchemaValidationServiceTest {
         assertThat(service.validateAndCollect(persisted, validData())).isEmpty();
         assertThat(service.validateAndCollect(persisted, dataWith("age", 12)))
                 .anyMatch(violation -> violation.contains("age"));
+    }
+
+    @Test
+    void publishableSchemaWithFields_shouldBeAccepted() {
+        service.validateDefinition(FORM);
+    }
+
+    @Test
+    void definitionWithoutSchema_shouldBeRefused() {
+        assertThatThrownBy(() -> service.validateDefinition(null))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("Aucun schéma");
+        assertThatThrownBy(() -> service.validateDefinition(Map.of()))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("Aucun schéma");
+    }
+
+    @Test
+    void definitionThatIsNotAnObjectWithFields_shouldBeRefused() {
+        assertThatThrownBy(() -> service.validateDefinition(map("type", "string")))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("`type: object`");
+        assertThatThrownBy(() -> service.validateDefinition(map("type", "object", "properties", Map.of())))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("`type: object`");
+    }
+
+    @Test
+    void definitionThatIsNotAValidSchema_shouldBeRefused() {
+        // Expression régulière invalide : le schéma ne peut pas être compilé, donc jamais appliqué.
+        Map<String, Object> notASchema = map(
+                "type", "object",
+                "properties", map("x", map("type", "string", "pattern", "(")));
+
+        assertThatThrownBy(() -> service.validateDefinition(notASchema))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("JSON Schema invalide");
+    }
+
+    @Test
+    void requiredFileField_shouldBeRefusedAtPublication() {
+        // FRM-05 : un fichier n'est jamais une donnée de formulaire ; l'exiger en `required`
+        // rendrait toute soumission refusée par le validateur serveur.
+        Map<String, Object> withRequiredFile = map(
+                "type", "object",
+                "properties", map("pieceJointe", map("type", "string", "format", "binary")),
+                "required", List.of("pieceJointe"));
+
+        assertThatThrownBy(() -> service.validateDefinition(withRequiredFile))
+                .isInstanceOf(WorkflowValidationException.class)
+                .hasMessageContaining("pièce jointe 'pieceJointe'")
+                .hasMessageContaining("FRM-05");
+    }
+
+    @Test
+    void optionalFileField_shouldBeAccepted() {
+        Map<String, Object> withOptionalFile = map(
+                "type", "object",
+                "properties", map(
+                        "pieceJointe", map("type", "string", "format", "binary"),
+                        "nom", map("type", "string")));
+
+        service.validateDefinition(withOptionalFile);
     }
 
     private List<String> violationsOf(Map<String, Object> data) {

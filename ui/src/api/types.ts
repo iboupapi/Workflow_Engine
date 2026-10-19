@@ -57,76 +57,129 @@ export type SpringPage<T> = Omit<Present<Schemas['PageWorkflowInstanceResponse']
 }
 
 /*
- * Phase 3 — demandes d'usagers (REQ-01, REQ-02, REQ-03).
+ * Phase 3 — demandes d'usagers (REQ-01, REQ-02, REQ-03) et espace d'administration.
  *
- * Ces contrats ne figurent pas encore dans schema.d.ts : ils sont recopies a la main
- * depuis les records exposes par RequestSubmissionService. A regenerer avec
- * `npm run api:generate` (backend demarre) pour supprimer cette duplication.
+ * Contrats derives de schema.d.ts (regenerable par `npm run api:generate`, backend
+ * demarre). Springdoc ne deduit pas les champs obligatoires : `Present<T>` retablit les
+ * champs presents en reponse, et les seuls champs que le serveur peut renvoyer a `null`
+ * sont redeclares explicitement — le rendu ne doit pas croire pouvoir appeler une methode
+ * sur une categorie absente.
  */
 
 /** Type de demande propose a l'usager (referentiel publie). */
-export interface RequestTypeView {
-  id: string
-  key: string
-  label: string
+export type RequestTypeView = Omit<Present<Schemas['TypeView']>, 'category'> & {
   category: string | null
 }
 
-/** Formulaire de la version publiee en vigueur : JSON Schema 2020-12 + UI Schema. */
-export interface RequestFormView {
-  typeKey: string
-  label: string
-  version: number
+/**
+ * Formulaire de la version publiee en vigueur : JSON Schema 2020-12 + UI Schema. Le schema
+ * est type localement : OpenAPI ne sait pas decrire un JSON Schema, le contrat genere ne le
+ * voit que comme un objet libre.
+ */
+export interface RequestFormView
+  extends Omit<Present<Schemas['FormView']>, 'schema' | 'uiSchema'> {
   schema: JsonSchema
   uiSchema: UiSchema | null
 }
 
 /** Statut d'une saisie d'usager. */
-export type SubmissionStatus = 'DRAFT' | 'SUBMITTED'
+export type SubmissionStatus = NonNullable<Schemas['SubmissionView']['status']>
 
 /** Saisie d'usager : brouillon reprenable ou demande soumise, liee a son dossier. */
-export interface SubmissionView {
-  id: string
-  typeKey: string
-  version: number
+export type SubmissionView = Omit<
+  Present<Schemas['SubmissionView']>,
+  'status' | 'instanceId' | 'submittedAt'
+> & {
   status: SubmissionStatus
   instanceId: string | null
-  createdAt: string
   submittedAt: string | null
 }
 
 /** Corps des endpoints de saisie : type vise et champs du formulaire. */
-export interface FormDataRequest {
-  typeKey: string
-  formData: Record<string, unknown>
-}
+export type FormDataRequest = Schemas['FormDataRequest']
 
 /** Brouillon complet : la saisie enregistree, pour reprendre le formulaire. */
-export interface DraftView {
-  id: string
-  typeKey: string
-  version: number
+export type DraftView = Omit<Present<Schemas['DraftView']>, 'formData'> & {
   formData: Record<string, unknown>
-  createdAt: string
 }
 
 /** Verdict de l'analyse antivirus d'une piece jointe (FRM-05). */
-export type AttachmentScanStatus = 'PENDING' | 'CLEAN' | 'INFECTED' | 'ERROR'
+export type AttachmentScanStatus = NonNullable<Schemas['AttachmentView']['scanStatus']>
 
 /**
  * Piece jointe d'une demande (FRM-05) : le contenu n'est jamais dans la reponse, seules
  * les metadonnees servent au rendu, et le verdict conditionne la mise a disposition.
  */
-export interface AttachmentView {
-  id: string
-  submissionId: string
-  fieldPath: string
-  filename: string
-  mimeType: string
-  sizeBytes: number
-  sha256: string
-  scanStatus: AttachmentScanStatus
-  createdAt: string
+export type AttachmentView = Present<Schemas['AttachmentView']>
+
+/* --------------------------------------------------------------------------------------
+ * Espace d'administration des E-Services (REQ-01, REQ-02, FRM-01).
+ * ------------------------------------------------------------------------------------ */
+
+/** Statut du referentiel d'un type de demande. */
+export type RequestTypeStatus = 'DRAFT' | 'PUBLISHED' | 'RETIRED'
+
+/** Ligne du tableau de bord d'administration : referentiel complet, tous statuts. */
+export type AdminRequestTypeView = Omit<
+  Present<Schemas['AdminRequestTypeView']>,
+  'category' | 'status' | 'version' | 'publishedAt' | 'definitionKey'
+> & {
+  category: string | null
+  status: RequestTypeStatus
+  /** Renseignes des qu'une version est publiee ; nuls pour un brouillon jamais publie. */
+  version: number | null
+  publishedAt: string | null
+  definitionKey: string | null
+}
+
+/** Type de demande rouvert dans l'editeur : version en vigueur et son formulaire. */
+export type AdminRequestTypeDetailView = Omit<
+  Present<Schemas['AdminRequestTypeDetailView']>,
+  'category' | 'status' | 'version' | 'publishedAt' | 'definitionKey' | 'fieldMapping'
+  | 'jsonSchema' | 'uiSchema'
+> & {
+  category: string | null
+  status: RequestTypeStatus
+  version: number | null
+  publishedAt: string | null
+  definitionKey: string | null
+  fieldMapping: Record<string, string> | null
+  jsonSchema: JsonSchema | null
+  uiSchema: UiSchema | null
+}
+
+/** Schema de formulaire enregistre : son identifiant sert a la publication. */
+export type FormSchemaView = Omit<
+  Present<Schemas['FormSchemaView']>,
+  'jsonSchema' | 'uiSchema'
+> & {
+  jsonSchema: JsonSchema
+  uiSchema: UiSchema | null
+}
+
+/** Circuit deploye proposable a la publication (derniere version de chaque cle). */
+export type DeployedWorkflowView = Present<Schemas['DeployedWorkflowView']>
+
+/** Corps des endpoints d'administration : tous les champs restent facultatifs. */
+export type CreateRequestTypeRequest = Schemas['CreateRequestTypeRequest']
+
+/**
+ * Formulaire soumis a la publication. Le JSON Schema est type localement (comme pour
+ * RequestFormView) et la liaison de champs est un objet plat champ -> variable moteur.
+ */
+export type CreateFormSchemaRequest = Omit<
+  Schemas['CreateFormSchemaRequest'],
+  'schemaJson' | 'uiSchema'
+> & {
+  schemaJson?: JsonSchema
+  uiSchema?: UiSchema | null
+}
+
+export type PublishRequestTypeVersionRequest = Omit<
+  Schemas['PublishRequestTypeVersionRequest'],
+  'fieldMapping'
+> & {
+  fieldMapping?: Record<string, string>
 }
 
 /** Sous-ensemble du JSON Schema utilise par le rendu (les autres mots-cles sont ignores). */

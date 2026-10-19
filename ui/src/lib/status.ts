@@ -21,3 +21,32 @@ export function statusTone(status: string): Tone {
       return 'neutral'
   }
 }
+
+/** Statut du referentiel d'un type de demande : ce que voit l'administration. */
+export function requestTypeTone(status: string): Tone {
+  switch (status) {
+    case 'PUBLISHED':
+      return 'green'
+    case 'DRAFT':
+      return 'amber'
+    case 'RETIRED':
+      return 'red'
+    default:
+      return 'neutral'
+  }
+}
+
+/** Libelle francais d'un statut de referentiel (l'enum du moteur reste en anglais). */
+export function requestTypeLabel(status: string): string {
+  switch (status) {
+    case 'PUBLISHED':
+      return 'publié'
+    case 'DRAFT':
+      return 'brouillon'
+    case 'RETIRED':
+      return 'retiré'
+    default:
+      return status
+  }
+}
+

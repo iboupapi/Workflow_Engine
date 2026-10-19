@@ -2,13 +2,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDownload, apiGet, apiPost, apiUpload } from './client'
 import type {
   ActionOption,
+  AdminRequestTypeDetailView,
+  AdminRequestTypeView,
   AttachmentView,
+  CreateFormSchemaRequest,
+  CreateRequestTypeRequest,
   DefinitionView,
+  DeployedWorkflowView,
   DevToken,
   DraftView,
   FormDataRequest,
+  FormSchemaView,
   HistoryEntry,
   InstanceView,
+  PublishRequestTypeVersionRequest,
   RequestFormView,
   RequestTypeView,
   SpringPage,
@@ -223,6 +230,78 @@ export function useDownloadAttachment() {
       apiDownload(`/api/requests/attachments/${attachment.id}`, attachment.filename),
   })
 }
+
+/* --------------------------------------------------------------------------------------
+ * Espace d'administration des E-Services (REQ-01, REQ-02, FRM-01).
+ *
+ * Ces endpoints exigent un administrateur NOMME (sujet du jeton declare cote serveur) :
+ * un 403 n'est pas une erreur de saisie, l'ecran doit le dire tel quel.
+ * ------------------------------------------------------------------------------------ */
+
+/** Referentiel complet, tous statuts : tableau de bord de l'administration. */
+export function useAdminRequestTypes(enabled = true) {
+  return useQuery({
+    queryKey: ['admin-request-types'],
+    enabled,
+    queryFn: () => apiGet<AdminRequestTypeView[]>('/api/admin/request-types'),
+  })
+}
+
+/** Type de demande rouvert dans l'editeur (version en vigueur et formulaire). */
+export function useAdminRequestType(requestTypeId: string | null) {
+  return useQuery({
+    queryKey: ['admin-request-type', requestTypeId],
+    enabled: requestTypeId !== null,
+    queryFn: () => apiGet<AdminRequestTypeDetailView>(`/api/admin/request-types/${requestTypeId}`),
+  })
+}
+
+/** Circuits deployes : ce qui peut etre rattache a un type de demande. */
+export function useDeployedWorkflows(enabled = true) {
+  return useQuery({
+    queryKey: ['admin-workflows'],
+    enabled,
+    queryFn: () => apiGet<DeployedWorkflowView[]>('/api/admin/workflows'),
+  })
+}
+
+/** Creation d'un type de demande (brouillon, non encore propose a l'usager). */
+export function useCreateRequestType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateRequestTypeRequest) =>
+      apiPost<AdminRequestTypeView>('/api/admin/request-types', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-request-types'] })
+    },
+  })
+}
+
+/** Enregistrement d'un schema de formulaire : renvoie l'identifiant a publier. */
+export function useCreateFormSchema() {
+  return useMutation({
+    mutationFn: (input: CreateFormSchemaRequest) =>
+      apiPost<FormSchemaView>('/api/admin/form-schemas', input),
+  })
+}
+
+/**
+ * Publication : associe type, formulaire et circuit. Le type apparait alors dans le
+ * catalogue usager — les deux caches sont donc rafraichis.
+ */
+export function usePublishRequestType() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: PublishRequestTypeVersionRequest) =>
+      apiPost<AdminRequestTypeView>('/api/admin/request-type-versions/publish', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-request-types'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-request-type'] })
+      void queryClient.invalidateQueries({ queryKey: ['request-types'] })
+    },
+  })
+}
+
 
 function invalidate(queryClient: ReturnType<typeof useQueryClient>): void {
   void queryClient.invalidateQueries({ queryKey: ['instances'] })
