@@ -100,19 +100,30 @@ public class RequestSubmissionService {
     /**
      * Enregistre un brouillon : la saisie n'est <strong>pas</strong> validée contre le schéma
      * (un brouillon est incomplet par nature) et aucun dossier n'est créé.
+     * <p>
+     * Un demandeur n'a <strong>qu'un</strong> brouillon par version de type de demande :
+     * un nouvel enregistrement met à jour le brouillon en cours au lieu d'en créer un
+     * second, ce qui permet de reprendre une saisie et de la compléter (les pièces jointes
+     * déjà déposées restent rattachées à la même saisie). Un brouillon déjà soumis n'est
+     * plus modifiable : un nouvel enregistrement repart alors d'une saisie vierge.
      */
     @Transactional
     public SubmissionView saveDraft(String typeKey, Map<String, Object> formData, String author) {
         RequestTypeVersion version = activeVersion(typeKey);
+        Map<String, Object> data = copy(formData);
 
-        RequestSubmission draft = new RequestSubmission();
+        RequestSubmission draft = submissions
+                .findFirstBySubmittedByAndStatusAndRequestTypeVersionIdOrderByCreatedAtDesc(
+                        author, RequestSubmissionStatus.DRAFT, version.getId())
+                .orElseGet(RequestSubmission::new);
+        boolean created = draft.getId() == null;
         draft.setRequestTypeVersion(version);
-        draft.setFormData(copy(formData));
+        draft.setFormData(data);
         draft.setSubmittedBy(author);
         draft = submissions.save(draft);
 
-        log.info("Brouillon {} enregistré par '{}' sur '{}' v{}",
-                draft.getId(), author, typeKey, version.getVersion());
+        log.info("Brouillon {} {} par '{}' sur '{}' v{}",
+                draft.getId(), created ? "enregistré" : "mis à jour", author, typeKey, version.getVersion());
         return view(draft);
     }
 

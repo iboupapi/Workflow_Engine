@@ -321,6 +321,30 @@ class RequestControllerTest {
     }
 
     @Test
+    void listInstanceAttachments_shouldReturnTheDossierAttachments() throws Exception {
+        UUID instanceId = UUID.randomUUID();
+        when(attachmentService.listForInstance(eq(instanceId), any()))
+                .thenReturn(List.of(attachmentView(UUID.randomUUID(), AttachmentScanStatus.CLEAN)));
+
+        mockMvc.perform(get("/api/instances/{instanceId}/attachments", instanceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].filename").value("note.txt"));
+
+        verify(attachmentService).listForInstance(eq(instanceId), any());
+    }
+
+    @Test
+    void listInstanceAttachments_shouldReturn404WhenTheDossierIsNotVisible() throws Exception {
+        UUID instanceId = UUID.randomUUID();
+        when(attachmentService.listForInstance(eq(instanceId), any()))
+                .thenThrow(new WorkflowNotFoundException("Aucun dossier pour cet identifiant."));
+
+        mockMvc.perform(get("/api/instances/{instanceId}/attachments", instanceId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WorkflowNotFoundException"));
+    }
+
+    @Test
     void downloadAttachment_shouldServeTheContentWithItsFingerprint() throws Exception {
         UUID attachmentId = UUID.randomUUID();
         when(attachmentService.download(eq(attachmentId), any()))

@@ -32,6 +32,11 @@ logging:
 
 server:
   port: 8080
+  tomcat:
+    # Une requête multipart refusée pour dépassement de taille doit pouvoir être vidée par
+    # le conteneur : sinon la connexion est coupée pendant l'envoi et le navigateur affiche
+    # un échec réseau au lieu du refus 413 explicite (FRM-05).
+    max-swallow-size: ${WORKFLOW_TOMCAT_MAX_SWALLOW:8MB}
 
 spring.servlet.multipart:
   # Plafond technique aligné sur la taille maximale métier des pièces jointes (FRM-05) :

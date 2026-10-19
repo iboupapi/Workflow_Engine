@@ -18,4 +18,11 @@ public interface RequestSubmissionRepository extends JpaRepository<RequestSubmis
 
     /** Soumission définitive ayant créé un dossier (traçabilité depuis le dossier). */
     Optional<RequestSubmission> findByInstanceId(UUID instanceId);
+
+    /**
+     * Brouillon en cours d'un demandeur sur une version donnée du type de demande : un seul
+     * brouillon par demandeur et par version, mis à jour à chaque enregistrement.
+     */
+    Optional<RequestSubmission> findFirstBySubmittedByAndStatusAndRequestTypeVersionIdOrderByCreatedAtDesc(
+            String submittedBy, RequestSubmissionStatus status, UUID requestTypeVersionId);
 }

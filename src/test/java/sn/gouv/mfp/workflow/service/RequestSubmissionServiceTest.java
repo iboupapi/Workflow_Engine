@@ -214,6 +214,54 @@ class RequestSubmissionServiceTest {
 
     @Test
     @Transactional
+    void saveDraft_twice_shouldUpdateTheSameDraft() {
+        RequestTypeVersion version = givenPublishedVersion(null);
+        String key = version.getRequestType().getKey();
+
+        SubmissionView first = service.saveDraft(key, map("motif", "Promotion"), AUTHOR);
+        SubmissionView second = service.saveDraft(key, map("motif", "Mutation"), AUTHOR);
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(submissions.findById(first.id()).orElseThrow().getFormData())
+                .containsExactlyEntriesOf(map("motif", "Mutation"));
+        assertThat(service.drafts(AUTHOR)).extracting(SubmissionView::id).containsExactly(first.id());
+    }
+
+    @Test
+    @Transactional
+    void saveDraft_shouldKeepOneDraftPerAuthorAndPerType() {
+        RequestTypeVersion first = givenPublishedVersion(null);
+        RequestTypeVersion second =
+                givenVersion(givenType(RequestTypeStatus.PUBLISHED), 1, FORM_SCHEMA, null);
+
+        SubmissionView mine = service.saveDraft(first.getRequestType().getKey(), map("nom", "Awa"), AUTHOR);
+        SubmissionView other = service.saveDraft(first.getRequestType().getKey(), map("nom", "Pape"), OTHER);
+        SubmissionView anotherType =
+                service.saveDraft(second.getRequestType().getKey(), map("nom", "Awa"), AUTHOR);
+
+        assertThat(other.id()).isNotEqualTo(mine.id());
+        assertThat(anotherType.id()).isNotEqualTo(mine.id());
+        assertThat(service.drafts(AUTHOR)).extracting(SubmissionView::id)
+                .containsExactlyInAnyOrder(mine.id(), anotherType.id());
+    }
+
+    @Test
+    @Transactional
+    void saveDraft_afterSubmission_shouldStartANewDraft() {
+        RequestTypeVersion version = givenPublishedVersion(null);
+        String key = version.getRequestType().getKey();
+        SubmissionView submitted = service.saveDraft(key, map("nom", "Awa"), AUTHOR);
+        service.submitDraft(submitted.id(), AUTHOR);
+
+        SubmissionView draft = service.saveDraft(key, map("nom", "Awa Diop"), AUTHOR);
+
+        assertThat(draft.id()).isNotEqualTo(submitted.id());
+        assertThat(draft.status()).isEqualTo(RequestSubmissionStatus.DRAFT);
+        assertThat(service.drafts(AUTHOR)).extracting(SubmissionView::id).containsExactly(draft.id());
+    }
+
+    @Test
+    @Transactional
     void submitDraft_shouldCreateTheInstanceAndFreezeTheDraft() {
         RequestTypeVersion version = givenPublishedVersion(map("nom", "nomDemandeur"));
         SubmissionView draft =

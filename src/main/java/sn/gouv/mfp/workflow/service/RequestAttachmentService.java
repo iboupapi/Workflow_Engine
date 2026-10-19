@@ -157,6 +157,23 @@ public class RequestAttachmentService {
     }
 
     /**
+     * Pièces jointes d'un dossier, pour la fiche dossier : le dossier est d'abord soumis à ses
+     * propres règles de visibilité (404 si invisible), puis ses pièces sont celles de la
+     * demande qui l'a créé. Un dossier ouvert par le moteur seul (sans demande) n'en a aucune :
+     * l'absence de demande se traduit par une liste vide, pas par un refus.
+     *
+     * @throws WorkflowNotFoundException dossier inconnu ou non visible
+     */
+    @Transactional(readOnly = true)
+    public List<AttachmentView> listForInstance(UUID instanceId, Viewer viewer) {
+        readService.visibleOrThrow(instanceId, viewer);
+        return submissions
+                .findByInstanceId(instanceId)
+                .map(submission -> list(submission.getId(), viewer))
+                .orElseGet(List::of);
+    }
+
+    /**
      * Contenu d'une pièce jointe, sous les règles de visibilité de son dossier.
      *
      * @throws WorkflowNotFoundException              pièce inconnue ou demande invisible

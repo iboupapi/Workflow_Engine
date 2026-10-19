@@ -299,6 +299,41 @@ class RequestAttachmentServiceTest {
                 .isInstanceOf(WorkflowNotFoundException.class);
     }
 
+    @Test
+    @Transactional
+    void listForInstance_shouldServeTheDossierAttachments() throws IOException {
+        UUID submissionId = givenDraft();
+        service.store(submissionId, FIELD, "note.txt", "text/plain", "abc".getBytes(StandardCharsets.UTF_8), AUTHOR);
+        UUID instanceId = submit(submissionId);
+
+        assertThat(service.listForInstance(instanceId, viewer(AUTHOR)))
+                .singleElement()
+                .satisfies(attachment -> assertThat(attachment.filename()).isEqualTo("note.txt"));
+    }
+
+    @Test
+    @Transactional
+    void listForInstance_shouldHideAnInvisibleDossier() {
+        UUID submissionId = givenDraft();
+        service.store(submissionId, FIELD, "note.txt", "text/plain", "abc".getBytes(StandardCharsets.UTF_8), AUTHOR);
+        UUID instanceId = submit(submissionId);
+
+        assertThatThrownBy(() -> service.listForInstance(instanceId, viewer(OTHER)))
+                .isInstanceOf(WorkflowNotFoundException.class);
+    }
+
+    @Test
+    @Transactional
+    void listForInstance_shouldBeEmptyWithoutALinkedRequest() {
+        RequestTypeVersion version = givenVersion();
+        UUID instanceId =
+                executionService.startWorkflow(version.getDefinition().getKey(), AUTHOR, null, null).getId();
+
+        assertThat(service.listForInstance(instanceId, viewer(AUTHOR))).isEmpty();
+        assertThatThrownBy(() -> service.listForInstance(UUID.randomUUID(), viewer(AUTHOR)))
+                .isInstanceOf(WorkflowNotFoundException.class);
+    }
+
     private RequestAttachmentService serviceWith(long maxSizeBytes, List<String> allowedTypes) {
         return new RequestAttachmentService(
                 submissions,
@@ -329,14 +364,14 @@ class RequestAttachmentServiceTest {
     }
 
     /** Soumet le brouillon : un dossier est créé, la demande devient immuable. */
-    private void submit(UUID submissionId) {
+    private UUID submit(UUID submissionId) {
         RequestSubmission submission = submissions.findById(submissionId).orElseThrow();
         RequestTypeVersion version = submission.getRequestTypeVersion();
         submission.setInstance(executionService.startWorkflow(
                 version.getDefinition().getKey(), AUTHOR, null, null));
         submission.setSubmittedAt(Instant.now());
         submission.setStatus(RequestSubmissionStatus.SUBMITTED);
-        submissions.saveAndFlush(submission);
+        return submissions.saveAndFlush(submission).getInstance().getId();
     }
 
     private RequestTypeVersion givenVersion() {

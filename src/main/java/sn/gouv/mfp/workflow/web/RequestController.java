@@ -233,6 +233,23 @@ public class RequestController {
     }
 
     @Operation(
+            summary = "Lister les pièces jointes d'un dossier",
+            description = "Fiche dossier : mêmes règles de visibilité que le dossier lui-même. "
+                    + "Un dossier ouvert par le moteur sans demande rattachée n'a aucune pièce "
+                    + "jointe (liste vide).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Pièces jointes du dossier."),
+        @ApiResponse(responseCode = "401", description = "Non authentifié."),
+        @ApiResponse(responseCode = "404", description = "Dossier inconnu ou non visible.")
+    })
+    @GetMapping("/instances/{instanceId}/attachments")
+    public List<AttachmentView> listInstanceAttachments(
+            @Parameter(description = "Identifiant du dossier.") @PathVariable UUID instanceId,
+            Authentication authentication) {
+        return attachmentService.listForInstance(instanceId, Viewer.from(authentication));
+    }
+
+    @Operation(
             summary = "Télécharger une pièce jointe",
             description = "Le contenu n'est servi que si l'analyse antivirus est favorable, et "
                     + "selon les règles de visibilité du dossier ; l'empreinte SHA-256 est "
