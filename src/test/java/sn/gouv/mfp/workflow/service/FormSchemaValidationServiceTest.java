@@ -66,6 +66,16 @@ class FormSchemaValidationServiceTest {
     }
 
     @Test
+    void violation_shouldNotRepeatTheLocationPrefix() {
+        Map<String, Object> data = new LinkedHashMap<>(validData());
+        data.remove("nom");
+
+        assertThat(violationsOf(data))
+                .allSatisfy(violation -> assertThat(violation).doesNotStartWith("$ : $"))
+                .anyMatch(violation -> violation.startsWith("$ : "));
+    }
+
+    @Test
     void emptySubmission_shouldBeRejectedOnEveryRequiredField() {
         List<String> violations = violationsOf(Map.of());
 

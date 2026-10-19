@@ -127,6 +127,25 @@ public class RequestSubmissionService {
     }
 
     /**
+     * Brouillon complet, pour reprendre la saisie là où elle s'est arrêtée.
+     *
+     * @throws WorkflowNotFoundException  brouillon inconnu
+     * @throws WorkflowForbiddenException brouillon d'un autre demandeur
+     * @throws WorkflowConflictException  la saisie a déjà été soumise
+     */
+    @Transactional(readOnly = true)
+    public DraftView draft(UUID draftId, String author) {
+        RequestSubmission draft = readableDraft(draftId, author);
+        RequestTypeVersion version = draft.getRequestTypeVersion();
+        return new DraftView(
+                draft.getId(),
+                version.getRequestType().getKey(),
+                version.getVersion(),
+                draft.getFormData(),
+                draft.getCreatedAt());
+    }
+
+    /**
      * Soumet directement une saisie : validation du formulaire, liaison des variables,
      * création du dossier, enregistrement de la demande soumise.
      *
@@ -164,6 +183,20 @@ public class RequestSubmissionService {
      */
     @Transactional
     public SubmissionView submitDraft(UUID draftId, String author) {
+        RequestSubmission draft = readableDraft(draftId, author);
+
+        WorkflowInstance instance = startInstance(draft.getRequestTypeVersion(), draft.getFormData(), author);
+        draft.setInstance(instance);
+        draft.setSubmittedAt(Instant.now());
+        draft.setStatus(RequestSubmissionStatus.SUBMITTED);
+        submissions.save(draft);
+
+        log.info("Brouillon {} soumis par '{}' (dossier {})", draft.getId(), author, instance.getId());
+        return view(draft);
+    }
+
+    /** Brouillon lisible par {@code author} : existant, encore brouillon et à lui. */
+    private RequestSubmission readableDraft(UUID draftId, String author) {
         RequestSubmission draft = submissions
                 .findById(draftId)
                 .orElseThrow(() -> new WorkflowNotFoundException(
@@ -174,17 +207,9 @@ public class RequestSubmissionService {
         }
         if (draft.getSubmittedBy() != null && !draft.getSubmittedBy().equals(author)) {
             throw new WorkflowForbiddenException(
-                    "Un brouillon n'est soumis que par son auteur.");
+                    "Un brouillon n'est consultable et soumis que par son auteur.");
         }
-
-        WorkflowInstance instance = startInstance(draft.getRequestTypeVersion(), draft.getFormData(), author);
-        draft.setInstance(instance);
-        draft.setSubmittedAt(Instant.now());
-        draft.setStatus(RequestSubmissionStatus.SUBMITTED);
-        submissions.save(draft);
-
-        log.info("Brouillon {} soumis par '{}' (dossier {})", draft.getId(), author, instance.getId());
-        return view(draft);
+        return draft;
     }
 
     /**
@@ -258,5 +283,14 @@ public class RequestSubmissionService {
             UUID instanceId,
             Instant createdAt,
             Instant submittedAt) {
+    }
+
+    /** Brouillon complet : la saisie enregistrée, pour la reprendre dans le formulaire. */
+    public record DraftView(
+            UUID id,
+            String typeKey,
+            int version,
+            Map<String, Object> formData,
+            Instant createdAt) {
     }
 }

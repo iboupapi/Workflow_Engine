@@ -33,6 +33,21 @@ logging:
 server:
   port: 8080
 
+spring.servlet.multipart:
+  # Plafond technique aligné sur la taille maximale métier des pièces jointes (FRM-05) :
+  # au-delà, le conteneur refuse la requête et l'API répond 413 (WorkflowExceptionHandler).
+  max-file-size: ${WORKFLOW_ATTACHMENTS_MAX_SIZE:5MB}
+  max-request-size: ${WORKFLOW_ATTACHMENTS_MAX_REQUEST:6MB}
+
+workflow:
+  attachments:
+    # FRM-05 : liste positive de types MIME RÉELS acceptés (le type déclaré par le client
+    # n'est jamais retenu), taille maximale, et répertoire de stockage du contenu.
+    # Le contenu ne va jamais en base : seule une clé opaque est consignée.
+    max-size-bytes: ${WORKFLOW_ATTACHMENTS_MAX_BYTES:5242880}
+    allowed-mime-types: ${WORKFLOW_ATTACHMENTS_TYPES:application/pdf,image/png,image/jpeg,text/plain}
+    directory: ${WORKFLOW_ATTACHMENTS_DIR:${java.io.tmpdir}/workflow-attachments}
+
 management:
   # Supervision minimale (recette 12.8) : seul l'état de santé est exposé,
   # sans détails (pas de modèle d'autorisation fine à ce stade).

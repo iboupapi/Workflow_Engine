@@ -129,7 +129,17 @@ public class FormSchemaValidationService {
         }
     }
 
+    /**
+     * Écart lisible : « emplacement : message ». La bibliothèque préfixe parfois le message
+     * par le même emplacement (« $ : $: ... ») ; le préfixe redondant est retiré pour que
+     * l'usager ne lise pas deux fois le même chemin.
+     */
     private static String describe(ValidationMessage message) {
-        return message.getInstanceLocation() + " : " + message.getMessage();
+        String location = message.getInstanceLocation().toString();
+        String text = message.getMessage();
+        if (text.startsWith(location + ": ")) {
+            text = text.substring(location.length() + 2);
+        }
+        return location + " : " + text;
     }
 }

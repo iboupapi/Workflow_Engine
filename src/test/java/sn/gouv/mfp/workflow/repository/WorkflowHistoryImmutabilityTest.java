@@ -64,6 +64,10 @@ class WorkflowHistoryImmutabilityTest {
                 .containsExactlyInAnyOrder("INSERT", "SELECT");
         assertThat(privilegesOf("request_submission"))
                 .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
+        // Pièces jointes (FRM-05) : le contenu étant hors base, seul le verdict antivirus
+        // demande un UPDATE. Ni DELETE ni TRUNCATE : un dépôt reste tracé.
+        assertThat(privilegesOf("request_attachment"))
+                .containsExactlyInAnyOrder("INSERT", "SELECT", "UPDATE");
     }
 
     @Test

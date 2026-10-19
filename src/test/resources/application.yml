@@ -26,6 +26,19 @@ spring:
     baseline-version: 1
     user: ${FLYWAY_OWNER_USER:workflow_owner}
     password: ${FLYWAY_OWNER_PASSWORD:}
+  servlet:
+    multipart:
+      # Mêmes plafonds que la production (FRM-05) : le conteneur refuse au-delà de 5 Mio.
+      max-file-size: ${WORKFLOW_ATTACHMENTS_MAX_SIZE:5MB}
+      max-request-size: ${WORKFLOW_ATTACHMENTS_MAX_REQUEST:6MB}
+
+# Pièces jointes (FRM-05) : valeurs de production, sauf le répertoire de stockage que les
+# tests unitaires remplacent par un répertoire temporaire (@TempDir).
+workflow:
+  attachments:
+    max-size-bytes: ${WORKFLOW_ATTACHMENTS_MAX_BYTES:5242880}
+    allowed-mime-types: ${WORKFLOW_ATTACHMENTS_TYPES:application/pdf,image/png,image/jpeg,text/plain}
+    directory: ${WORKFLOW_ATTACHMENTS_DIR:${java.io.tmpdir}/workflow-attachments-test}
 
 # Aligne le socle de test sur le defaut de production : la documentation API est
 # desactivee sauf activation explicite (SWAGGER_ENABLED=true). Preuve : Phase0GuardsTest
