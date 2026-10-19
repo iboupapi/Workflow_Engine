@@ -19,7 +19,7 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
 
   if (!authenticated) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+      <div className="rounded-lg border border-line bg-surface-muted p-6 text-sm text-ink-muted">
         Choisissez un jeton de test ci-dessus pour consulter les dossiers.
       </div>
     )
@@ -39,8 +39,8 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
                 onClick={() => setView(candidate.id)}
                 className={`rounded-md border px-2 py-1 text-xs ${
                   view === candidate.id
-                    ? 'border-sky-500 bg-sky-950 text-sky-200'
-                    : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                    ? 'border-mfp-green bg-mfp-green/10 font-medium text-mfp-green'
+                    : 'border-line-strong text-ink hover:bg-surface-muted'
                 }`}
               >
                 {candidate.label}
@@ -49,29 +49,29 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
           </div>
         }
       >
-        {isLoading && <p className="text-sm text-slate-400">Chargement…</p>}
+        {isLoading && <p className="text-sm text-ink-muted">Chargement…</p>}
         <ErrorNote error={error} />
-        <ul className="divide-y divide-slate-800">
+        <ul className="divide-y divide-line">
           {data?.content.map((instance) => (
             <li key={instance.id}>
               <button
                 type="button"
                 onClick={() => setSelected(instance.id)}
-                className={`flex w-full flex-col gap-1 px-2 py-3 text-left hover:bg-slate-800/50 ${
-                  selected === instance.id ? 'bg-slate-800/40' : ''
+                className={`flex w-full flex-col gap-1 px-2 py-3 text-left hover:bg-surface-muted ${
+                  selected === instance.id ? 'bg-mfp-green/5' : ''
                 }`}
               >
                 <span className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-slate-400">
+                  <span className="font-mono text-xs text-ink-muted">
                     {instance.id.slice(0, 8)}
                   </span>
                   <Badge tone={statusTone(instance.status)}>{instance.status}</Badge>
                 </span>
-                <span className="text-sm text-slate-200">
+                <span className="text-sm text-ink">
                   {instance.definitionKey} · étape{' '}
-                  <span className="font-medium text-slate-100">{instance.currentStepKey}</span>
+                  <span className="font-medium">{instance.currentStepKey}</span>
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-ink-muted">
                   initiateur {instance.initiatorId ?? '—'}
                   {instance.assigneeId ? ` · imputé ${instance.assigneeId}` : ''}
                 </span>
@@ -80,7 +80,7 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
           ))}
         </ul>
         {data && data.content.length === 0 && (
-          <p className="text-sm text-slate-400">Aucun dossier dans cette vue.</p>
+          <p className="text-sm text-ink-muted">Aucun dossier dans cette vue.</p>
         )}
       </Panel>
 
@@ -88,7 +88,7 @@ export function DossiersView({ authenticated }: { authenticated: boolean }) {
         <InstanceDetail id={selected} />
       ) : (
         <Panel title="Détail">
-          <p className="text-sm text-slate-400">Sélectionnez un dossier.</p>
+          <p className="text-sm text-ink-muted">Sélectionnez un dossier.</p>
         </Panel>
       )}
     </div>

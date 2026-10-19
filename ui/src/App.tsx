@@ -26,22 +26,23 @@ export default function App() {
   }, [selectedToken])
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+    <div className="flex min-h-screen flex-col border-t-4 border-mfp-green bg-canvas text-ink">
+      <header className="flex items-center justify-between border-b border-line bg-surface px-6 py-4">
+        {/* Emplacement reserve au logo horizontal (charte : zone de protection de 5 %). */}
         <div>
-          <h1 className="text-lg font-semibold text-slate-50">Moteur de workflow — Console</h1>
-          <p className="text-xs text-slate-400">
+          <h1 className="text-lg font-semibold text-ink">Moteur de workflow — Console</h1>
+          <p className="text-xs text-ink-muted">
             Circuit {CIRCUIT} · backend http://localhost:8080 (profil dev)
           </p>
         </div>
-        <span className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300">
+        <span className="rounded-full border border-line-strong px-3 py-1 text-xs text-ink">
           {selectedToken ? `${selectedToken.role} — ${selectedToken.subject}` : 'aucun jeton'}
         </span>
       </header>
 
       <RoleBar active={selectedToken} onSelect={setSelectedToken} />
 
-      <nav className="flex gap-1 border-b border-slate-800 px-6">
+      <nav className="flex gap-1 border-b border-line bg-surface px-6">
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -49,8 +50,8 @@ export default function App() {
             onClick={() => setTab(id)}
             className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm ${
               tab === id
-                ? 'border-sky-500 text-sky-200'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-mfp-green font-medium text-mfp-green'
+                : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
             <Icon className="h-4 w-4" />

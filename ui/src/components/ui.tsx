@@ -11,9 +11,9 @@ export function Panel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/50">
-      <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
+    <section className="rounded-lg border border-line bg-surface shadow-sm">
+      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {actions}
       </header>
       <div className="p-4">{children}</div>
@@ -35,7 +35,7 @@ export function ErrorNote({ error }: { error: unknown }) {
   }
   const message = error instanceof Error ? error.message : String(error)
   return (
-    <p className="rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">
+    <p className="rounded-md border border-mfp-red bg-mfp-red/10 px-3 py-2 text-sm text-mfp-red">
       {message}
     </p>
   )

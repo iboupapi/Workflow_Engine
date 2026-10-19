@@ -16,16 +16,16 @@ export function RoleBar({
   const { data, isLoading, error, refetch } = useDevTokens()
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900/40 px-6 py-3">
-      <span className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+    <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-muted px-6 py-3">
+      <span className="flex items-center gap-2 text-xs font-semibold tracking-wide text-ink-muted uppercase">
         <ShieldCheck className="h-4 w-4" /> Jeton de test
       </span>
 
-      {isLoading && <span className="text-sm text-slate-400">Chargement…</span>}
+      {isLoading && <span className="text-sm text-ink-muted">Chargement…</span>}
 
       {error != null && (
         <>
-          <span className="text-sm text-amber-400">
+          <span className="text-sm text-mfp-orange">
             Endpoint de jetons indisponible (backend en profil « dev » requis).
           </span>
           <button
@@ -33,7 +33,7 @@ export function RoleBar({
             onClick={() => {
               void refetch()
             }}
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            className="rounded-md border border-line-strong px-2 py-1 text-xs text-ink hover:bg-surface"
           >
             Réessayer
           </button>
@@ -49,8 +49,8 @@ export function RoleBar({
             onClick={() => onSelect(token)}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
               selected
-                ? 'border-sky-500 bg-sky-950 text-sky-200'
-                : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                ? 'border-mfp-green bg-mfp-green/10 text-mfp-green'
+                : 'border-line-strong text-ink hover:bg-surface'
             }`}
           >
             <UserRound className="h-3.5 w-3.5" />
@@ -63,7 +63,7 @@ export function RoleBar({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="ml-auto rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          className="ml-auto rounded-md border border-line-strong px-2 py-1 text-xs text-ink hover:bg-surface"
         >
           Se déconnecter
         </button>

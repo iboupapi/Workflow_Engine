@@ -8,18 +8,18 @@ import { Panel, ErrorNote } from './ui'
 type StepNodeData = { label: ReactNode }
 
 const TYPE_TONE: Record<StepType, string> = {
-  START: 'border-emerald-500 bg-emerald-950',
-  TASK: 'border-slate-600 bg-slate-900',
-  END: 'border-sky-500 bg-sky-950',
+  START: 'border-mfp-green bg-mfp-green/10',
+  TASK: 'border-line-strong bg-surface',
+  END: 'border-mfp-blue bg-mfp-blue/10',
 }
 
 function StepLabel({ step }: { step: StepView }) {
   return (
     <div className={`min-w-40 rounded-md border px-3 py-2 text-left ${TYPE_TONE[step.type]}`}>
-      <div className="font-mono text-xs text-slate-300">{step.key}</div>
-      {step.name && <div className="text-xs text-slate-100">{step.name}</div>}
+      <div className="font-mono text-xs text-ink-muted">{step.key}</div>
+      {step.name && <div className="text-xs text-ink">{step.name}</div>}
       {step.owners.length > 0 && (
-        <div className="mt-1 text-[10px] tracking-wide text-slate-400 uppercase">
+        <div className="mt-1 text-[10px] tracking-wide text-ink-muted uppercase">
           {step.owners.join(', ')}
         </div>
       )}
@@ -108,7 +108,7 @@ export function CircuitView({
 
   if (!authenticated) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+      <div className="rounded-lg border border-line bg-surface-muted p-6 text-sm text-ink-muted">
         Choisissez un jeton de test ci-dessus pour consulter le circuit (la définition
         est protégée).
       </div>
@@ -119,17 +119,17 @@ export function CircuitView({
     <Panel
       title={data ? `Circuit ${data.key} v${data.version}` : 'Circuit'}
       actions={
-        <div className="flex gap-3 text-xs text-slate-400">
+        <div className="flex gap-3 text-xs text-ink-muted">
           <span>— trait plein : transition</span>
           <span>- - : rejet vers le responsable du traitement</span>
-          <span className="text-emerald-400">animé : pose le responsable (setsHandler)</span>
+          <span className="text-mfp-green">animé : pose le responsable (setsHandler)</span>
         </div>
       }
     >
-      {isLoading && <p className="text-sm text-slate-400">Chargement…</p>}
+      {isLoading && <p className="text-sm text-ink-muted">Chargement…</p>}
       <ErrorNote error={error} />
       {graph && data && (
-        <div className="h-[620px] w-full overflow-hidden rounded-md border border-slate-800">
+        <div className="h-[620px] w-full overflow-hidden rounded-md border border-line bg-surface">
           <ReactFlow
             key={`${data.key}-${data.version}`}
             defaultNodes={graph.nodes}

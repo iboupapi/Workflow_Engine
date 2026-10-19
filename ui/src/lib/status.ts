@@ -1,9 +1,9 @@
 export const TONES = {
-  neutral: 'border-slate-700 bg-slate-800 text-slate-200',
-  green: 'border-emerald-700 bg-emerald-950 text-emerald-300',
-  amber: 'border-amber-700 bg-amber-950 text-amber-300',
-  blue: 'border-sky-700 bg-sky-950 text-sky-300',
-  red: 'border-rose-700 bg-rose-950 text-rose-300',
+  neutral: 'border-line-strong bg-surface-muted text-ink',
+  green: 'border-mfp-green bg-mfp-green/10 text-mfp-green',
+  amber: 'border-mfp-yellow bg-mfp-yellow/25 text-ink',
+  blue: 'border-mfp-blue bg-mfp-blue/10 text-mfp-blue',
+  red: 'border-mfp-red bg-mfp-red/10 text-mfp-red',
 } as const
 
 export type Tone = keyof typeof TONES
