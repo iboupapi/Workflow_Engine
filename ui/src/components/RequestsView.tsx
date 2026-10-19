@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useDraft, useDrafts, useSubmitDraft } from '../api/hooks'
 import type { SubmissionView } from '../api/types'
 import { CatalogView } from './CatalogView'
+import { AttachmentList } from './AttachmentList'
 import { DynamicRequestForm } from './DynamicRequestForm'
 import { Badge, ErrorNote, Panel } from './ui'
 
@@ -96,6 +97,9 @@ export function RequestsView({
                 <Inbox className="h-4 w-4" /> Ouvrir le dossier
               </button>
             )}
+            <div className="mt-4 border-t border-line pt-4">
+              <AttachmentList submissionId={submitted.id} />
+            </div>
           </Panel>
         )}
       </div>
@@ -126,7 +130,7 @@ export function RequestsView({
                       <Badge tone="amber">brouillon</Badge>
                     </span>
                     <span className="text-xs text-ink-muted">
-                      enregistré le {new Date(draft.createdAt).toLocaleString('fr-FR')} · version{' '}
+                      créé le {new Date(draft.createdAt).toLocaleString('fr-FR')} · version{' '}
                       {draft.version}
                     </span>
                   </button>

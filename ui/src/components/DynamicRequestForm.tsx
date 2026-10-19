@@ -1,8 +1,18 @@
 import { ArrowLeft, Save, Send } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
-import { useRequestForm, useSaveDraft, useSubmitDraft, useSubmitRequest } from '../api/hooks'
-import type { SubmissionView } from '../api/types'
-import { formFields, initialValues, toFormData } from '../lib/formSchema'
+import {
+  useAttachments,
+  useDownloadAttachment,
+  useRequestForm,
+  useSaveDraft,
+  useSubmitDraft,
+  useSubmitRequest,
+  useUploadAttachment,
+} from '../api/hooks'
+import type { AttachmentView, SubmissionView } from '../api/types'
+import { ATTACHMENT_LABELS } from '../lib/attachments'
+import { formFields, initialValues, toFormData, type FormField } from '../lib/formSchema'
+import { AttachmentList } from './AttachmentList'
 import { FormFieldInput } from './FormFieldInput'
 import { ErrorNote, Panel } from './ui'
 
@@ -10,6 +20,9 @@ import { ErrorNote, Panel } from './ui'
  * Formulaire dynamique d'un type de demande : rendu a partir du JSON Schema publie,
  * enregistrement en brouillon (REQ-03) puis soumission (REQ-01), qui cree le dossier.
  * Les erreurs de validation renvoyees par le serveur (FRM-03) sont affichees telles quelles.
+ *
+ * Les champs pieces jointes (FRM-05) ne se saisissent pas : le depot exige un brouillon,
+ * qui est donc cree a la volee si l'usager depose un fichier avant tout enregistrement.
  */
 export function DynamicRequestForm({
   typeKey,
@@ -30,9 +43,14 @@ export function DynamicRequestForm({
   const submit = useSubmitRequest()
   const saveDraft = useSaveDraft()
   const submitDraft = useSubmitDraft()
+  const upload = useUploadAttachment()
+  const download = useDownloadAttachment()
   const [edited, setEdited] = useState<Record<string, unknown> | null>(null)
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId)
   const [notice, setNotice] = useState<string | null>(null)
+  const [formError, setFormError] = useState<unknown>(null)
+  const [fileErrors, setFileErrors] = useState<Record<string, unknown>>({})
+  const [uploadingField, setUploadingField] = useState<string | null>(null)
 
   const fields = useMemo(
     () => formFields(form.data?.schema, form.data?.uiSchema ?? null),
@@ -46,12 +64,35 @@ export function DynamicRequestForm({
    */
   const values = edited ?? initialValues(form.data?.schema, savedValues)
 
+  /*
+   * Verite des pieces jointes : c'est le serveur qui detient le verdict et le rattachement
+   * au champ, la saisie ne conserve que l'identifiant renvoye par le depot.
+   */
+  const attachments = useAttachments(currentDraftId)
+  const byField = useMemo(() => {
+    const map: Record<string, AttachmentView> = {}
+    for (const attachment of attachments.data ?? []) {
+      map[attachment.fieldPath] = attachment
+    }
+    return map
+  }, [attachments.data])
+  const labels = useMemo(
+    () => Object.fromEntries(fields.map((field) => [field.name, field.label])),
+    [fields],
+  )
+
   function set(name: string, value: unknown): void {
     setEdited({ ...values, [name]: value })
   }
 
   function formData(): Record<string, unknown> {
     return toFormData(fields, values)
+  }
+
+  function missingFiles(): FormField[] {
+    return fields.filter(
+      (field) => field.widget === 'file' && field.required && !byField[field.name],
+    )
   }
 
   function onSaveDraft(): void {
@@ -67,11 +108,61 @@ export function DynamicRequestForm({
     )
   }
 
+  /**
+   * Depot d'une piece jointe : un identifiant de brouillon est indispensable puisque le
+   * rattachement se fait sur la saisie (FRM-05), on en cree donc un au besoin a partir de
+   * la saisie courante. Le fichier n'entre pas dans les donnees du formulaire : c'est la
+   * piece jointe rattachee au champ qui fait foi, et le serveur seul en rend le verdict.
+   */
+  async function onFile(field: FormField, file: File): Promise<void> {
+    setNotice(null)
+    setFormError(null)
+    setFileErrors((errors) => ({ ...errors, [field.name]: null }))
+    setUploadingField(field.name)
+    try {
+      const target = currentDraftId ?? (await saveDraft.mutateAsync({ typeKey, formData: formData() })).id
+      if (!currentDraftId) {
+        setCurrentDraftId(target)
+      }
+      const uploaded = await upload.mutateAsync({ submissionId: target, fieldPath: field.name, file })
+      setNotice(
+        `« ${uploaded.filename} » déposée (${ATTACHMENT_LABELS[uploaded.scanStatus]}). ${
+          uploaded.scanStatus === 'CLEAN'
+            ? 'Le contenu est disponible au téléchargement.'
+            : 'Le contenu n’est pas téléchargeable.'
+        }`,
+      )
+    } catch (cause) {
+      setFileErrors((errors) => ({ ...errors, [field.name]: cause }))
+    } finally {
+      setUploadingField(null)
+    }
+  }
+
   function onSubmit(event: FormEvent): void {
     event.preventDefault()
     setNotice(null)
+    setFormError(null)
+    const missing = missingFiles()
+    if (missing.length > 0) {
+      setFormError(
+        new Error(
+          `Pièce jointe manquante : ${missing.map((field) => field.label).join(', ')}. Déposez le fichier avant de soumettre la demande.`,
+        ),
+      )
+      return
+    }
     if (currentDraftId) {
-      submitDraft.mutate(currentDraftId, { onSuccess: onSubmitted })
+      /*
+       * C'est la saisie ENREGISTRÉE qui est soumise : on la met donc à jour juste avant, pour
+       * que les valeurs saisies depuis le dernier enregistrement soient prises en compte.
+       * Un brouillon par demandeur et par type de demande : la mise à jour conserve la même
+       * saisie, et donc les pièces jointes qui y sont rattachées.
+       */
+      saveDraft.mutate(
+        { typeKey, formData: formData() },
+        { onSuccess: (draft) => submitDraft.mutate(draft.id, { onSuccess: onSubmitted }) },
+      )
       return
     }
     submit.mutate({ typeKey, formData: formData() }, { onSuccess: onSubmitted })
@@ -123,6 +214,12 @@ export function DynamicRequestForm({
                 value={values[field.name]}
                 disabled={pending}
                 onChange={(value) => set(field.name, value)}
+                attachment={byField[field.name] ?? null}
+                uploading={uploadingField === field.name}
+                fileError={fileErrors[field.name] ?? null}
+                onFile={(file) => void onFile(field, file)}
+                onDownload={download.mutate}
+                downloading={download.isPending}
               />
             ))}
 
@@ -131,7 +228,21 @@ export function DynamicRequestForm({
                 {notice}
               </p>
             )}
+            <ErrorNote error={formError} />
             <ErrorNote error={error} />
+
+            {fields.some((field) => field.widget === 'file') && !currentDraftId && (
+              <p className="rounded-md border border-line bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+                Le dépôt d’une pièce jointe enregistre d’abord un brouillon, qui porte la
+                pièce jointe jusqu’à la soumission de la demande.
+              </p>
+            )}
+
+            {currentDraftId && (
+              <div className="border-t border-line pt-4">
+                <AttachmentList submissionId={currentDraftId} labels={labels} />
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2 border-t border-line pt-4">
               <button

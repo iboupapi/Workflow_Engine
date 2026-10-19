@@ -110,6 +110,25 @@ export interface DraftView {
   createdAt: string
 }
 
+/** Verdict de l'analyse antivirus d'une piece jointe (FRM-05). */
+export type AttachmentScanStatus = 'PENDING' | 'CLEAN' | 'INFECTED' | 'ERROR'
+
+/**
+ * Piece jointe d'une demande (FRM-05) : le contenu n'est jamais dans la reponse, seules
+ * les metadonnees servent au rendu, et le verdict conditionne la mise a disposition.
+ */
+export interface AttachmentView {
+  id: string
+  submissionId: string
+  fieldPath: string
+  filename: string
+  mimeType: string
+  sizeBytes: number
+  sha256: string
+  scanStatus: AttachmentScanStatus
+  createdAt: string
+}
+
 /** Sous-ensemble du JSON Schema utilise par le rendu (les autres mots-cles sont ignores). */
 export interface JsonSchema {
   type?: string

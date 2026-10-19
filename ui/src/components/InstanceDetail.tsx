@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useActions, useHistory, useInstance, useTransition } from '../api/hooks'
 import { statusTone } from '../lib/status'
+import { AttachmentList } from './AttachmentList'
 import { Badge, ErrorNote, Panel } from './ui'
 
 function formatTimestamp(value: string): string {
@@ -56,6 +57,12 @@ export function InstanceDetail({ id }: { id: string }) {
             {JSON.stringify(instance.data.variables ?? {}, null, 2)}
           </pre>
         </details>
+      )}
+
+      {instance.data && (
+        <div className="mt-4 border-t border-line pt-4">
+          <AttachmentList instanceId={id} />
+        </div>
       )}
 
       <div className="mt-4 border-t border-line pt-4">

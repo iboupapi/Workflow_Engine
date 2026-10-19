@@ -1,16 +1,34 @@
+import type { AttachmentView } from '../api/types'
 import type { FormField } from '../lib/formSchema'
+import { FileFieldInput } from './FileFieldInput'
 
-/** Saisie d'un champ du formulaire dynamique, selon le widget deduit du JSON Schema. */
+/**
+ * Saisie d'un champ du formulaire dynamique, selon le widget deduit du JSON Schema.
+ * Les champs pieces jointes delegent au depot de fichier (FRM-05) : leur valeur n'est pas
+ * saisie mais renseignee par l'identifiant de la piece jointe stockee.
+ */
 export function FormFieldInput({
   field,
   value,
   disabled,
   onChange,
+  attachment = null,
+  uploading = false,
+  fileError = null,
+  onFile,
+  onDownload,
+  downloading = false,
 }: {
   field: FormField
   value: unknown
   disabled: boolean
   onChange: (value: unknown) => void
+  attachment?: AttachmentView | null
+  uploading?: boolean
+  fileError?: unknown
+  onFile?: (file: File) => void
+  onDownload?: (attachment: AttachmentView) => void
+  downloading?: boolean
 }) {
   const inputClass =
     'rounded-md border border-line-strong bg-surface p-2 text-sm text-ink focus:border-mfp-green focus:outline-none disabled:opacity-60'
@@ -25,6 +43,21 @@ export function FormFieldInput({
       )}
     </span>
   )
+
+  if (field.widget === 'file') {
+    return (
+      <FileFieldInput
+        field={field}
+        attachment={attachment}
+        uploading={uploading}
+        disabled={disabled}
+        error={fileError}
+        onFile={onFile ?? (() => undefined)}
+        onDownload={onDownload ?? (() => undefined)}
+        downloading={downloading}
+      />
+    )
+  }
 
   if (field.widget === 'checkbox') {
     return (

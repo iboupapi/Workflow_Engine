@@ -10,6 +10,10 @@ export type FieldWidget =
   | 'email'
   | 'select'
   | 'multiselect'
+  | 'file'
+
+/** Formats JSON Schema designant un depot de fichier (piece jointe, FRM-05). */
+const FILE_FORMATS = ['binary', 'file', 'attachment', 'data-url']
 
 /** Champ du formulaire, pret a etre rendu. */
 export interface FormField {
@@ -67,8 +71,11 @@ function describe(
 }
 
 function widgetOf(property: JsonSchemaProperty, ui: UiSchemaField): FieldWidget {
-  if (ui.widget === 'textarea' || ui.widget === 'text') {
+  if (ui.widget === 'textarea' || ui.widget === 'text' || ui.widget === 'file') {
     return ui.widget
+  }
+  if (property.format !== undefined && FILE_FORMATS.includes(property.format)) {
+    return 'file'
   }
   if (Array.isArray(property.enum)) {
     return 'select'
@@ -126,6 +133,8 @@ export function initialValues(
 /**
  * Convertit la saisie en corps de requete : les champs laisses vides sont omis, ce qui
  * laisse au schema serveur le soin de signaler une donnee obligatoire manquante (FRM-03).
+ * Les champs pieces jointes sont ecartes : le rattachement d'un fichier vit dans la table
+ * des pieces jointes (FRM-05), pas dans la saisie.
  */
 export function toFormData(
   fields: FormField[],
@@ -133,6 +142,9 @@ export function toFormData(
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {}
   for (const field of fields) {
+    if (field.widget === 'file') {
+      continue
+    }
     const value = coerce(field, values[field.name])
     if (value !== undefined) {
       data[field.name] = value
@@ -142,6 +154,9 @@ export function toFormData(
 }
 
 function coerce(field: FormField, raw: unknown): unknown {
+  if (field.widget === 'file') {
+    return undefined
+  }
   if (field.widget === 'multiselect') {
     return Array.isArray(raw) && raw.length > 0 ? raw : undefined
   }

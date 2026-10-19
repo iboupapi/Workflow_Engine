@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost } from './client'
+import { apiDownload, apiGet, apiPost, apiUpload } from './client'
 import type {
   ActionOption,
+  AttachmentView,
   DefinitionView,
   DevToken,
   DraftView,
@@ -160,6 +161,66 @@ export function useSubmitDraft() {
       invalidate(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['request-drafts'] })
     },
+  })
+}
+
+/* --------------------------------------------------------------------------------------
+ * Pieces jointes (FRM-05) : le contenu vit hors base, seules les metadonnees circulent.
+ * ------------------------------------------------------------------------------------ */
+
+/** Pieces jointes deposees sur une saisie (brouillon ou demande soumise). */
+export function useAttachments(submissionId: string | null) {
+  return useQuery({
+    queryKey: ['request-attachments', submissionId],
+    enabled: submissionId !== null && submissionId.length > 0,
+    queryFn: () =>
+      apiGet<AttachmentView[]>(`/api/requests/submissions/${submissionId}/attachments`),
+  })
+}
+
+/** Pieces jointes d'un dossier (fiche dossier) : memes regles de visibilite que lui. */
+export function useInstanceAttachments(instanceId: string | null) {
+  return useQuery({
+    queryKey: ['instance-attachments', instanceId],
+    enabled: instanceId !== null && instanceId.length > 0,
+    queryFn: () => apiGet<AttachmentView[]>(`/api/instances/${instanceId}/attachments`),
+  })
+}
+
+/** Depot d'une piece jointe sur un brouillon : le serveur controle type, taille et virus. */
+export function useUploadAttachment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      submissionId,
+      fieldPath,
+      file,
+    }: {
+      submissionId: string
+      fieldPath: string
+      file: File
+    }) => {
+      const form = new FormData()
+      form.append('fieldPath', fieldPath)
+      form.append('file', file)
+      return apiUpload<AttachmentView>(
+        `/api/requests/submissions/${submissionId}/attachments`,
+        form,
+      )
+    },
+    onSuccess: (_attachment, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: ['request-attachments', variables.submissionId],
+      })
+    },
+  })
+}
+
+/** Telechargement d'une piece jointe autorisee par le controle sanitaire. */
+export function useDownloadAttachment() {
+  return useMutation({
+    mutationFn: (attachment: AttachmentView) =>
+      apiDownload(`/api/requests/attachments/${attachment.id}`, attachment.filename),
   })
 }
 
